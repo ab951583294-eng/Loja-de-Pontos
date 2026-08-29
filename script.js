@@ -1,19 +1,18 @@
 // ============================================================
 // CONFIGURAÇÃO DO SUPABASE
-// Substitua pelas suas credenciais do Supabase
 // ============================================================
 const SUPABASE_URL = 'https://yvpmptaczeitafibnawh.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2cG1wdGFjemVpdGFmaWJuYXdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMTM3NTUsImV4cCI6MjEwMzU4OTc1NX0.WIjjlyZw6qDX8et7DQgm3ddPQ8YrY57MDSRk-FKNVZ0';
 
-// Inicializar cliente Supabase
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// Inicializar cliente Supabase corretamente
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ============================================================
 // CLASSE DATABASE - Wrapper do Supabase
 // ============================================================
 class Database {
     async getAll(table) {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from(table)
             .select('*')
             .order('id', { ascending: true });
@@ -22,7 +21,7 @@ class Database {
     }
 
     async get(table, id) {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from(table)
             .select('*')
             .eq('id', id)
@@ -32,7 +31,7 @@ class Database {
     }
 
     async add(table, data) {
-        const { data: result, error } = await supabase
+        const { data: result, error } = await supabaseClient
             .from(table)
             .insert([data])
             .select()
@@ -42,7 +41,7 @@ class Database {
     }
 
     async update(table, data) {
-        const { error } = await supabase
+        const { error } = await supabaseClient
             .from(table)
             .update(data)
             .eq('id', data.id);
@@ -51,7 +50,7 @@ class Database {
     }
 
     async delete(table, id) {
-        const { error } = await supabase
+        const { error } = await supabaseClient
             .from(table)
             .delete()
             .eq('id', id);
@@ -355,7 +354,7 @@ class LojaDePontos {
             const recompensa = await this.db.get('recompensas', recompensaId);
 
             if (this.currentUser.pontos_totais < recompensa.custo_pontos) {
-                this.showModal('Pontos Insuficientes ', 
+                this.showModal('Pontos Insuficientes', 
                     `Você precisa de ${recompensa.custo_pontos} pontos. Você tem ${this.currentUser.pontos_totais}.`);
                 return;
             }
