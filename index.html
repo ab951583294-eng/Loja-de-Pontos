@@ -41,6 +41,7 @@
                 <button class="tab-btn active" data-tab="acoes">Ações</button>
                 <button class="tab-btn" data-tab="recompensas">Recompensas</button>
                 <button class="tab-btn" data-tab="compras">Minhas Compras</button>
+                <button class="tab-btn" data-tab="metas">Metas do Dia</button>
             </div>
 
             <!-- AÇÕES -->
@@ -78,12 +79,39 @@
                     </div>
                 </div>
             </div>
+
+            <!-- METAS DO DIA -->
+            <div id="tab-metas" class="tab-content">
+                <!-- Aviso de dia pendente -->
+                <div id="diaPendenteBanner" class="dia-pendente-banner" style="display: none;">
+                    <p>⚠️ Você tem um dia pendente não encerrado.</p>
+                    <div class="dia-pendente-actions">
+                        <button class="btn btn-secondary" onclick="app.pularDiaPendente()">Pular dia (perde streak)</button>
+                        <button class="btn btn-primary" onclick="app.irParaDiaPendente()">Ver dia pendente</button>
+                    </div>
+                </div>
+
+                <!-- Streak display -->
+                <div class="streak-display">
+                    <div class="streak-fire">🔥</div>
+                    <div class="streak-info">
+                        <div class="streak-count" id="streakCount">0</div>
+                        <div class="streak-label">dias seguidos</div>
+                    </div>
+                    <div class="streak-next" id="streakNext">Próximo marco: 15 dias</div>
+                </div>
+
+                <!-- Conteúdo do dia -->
+                <div id="metasDiaContent">
+                    <p class="empty-state">Selecione um usuário para ver as metas</p>
+                </div>
+            </div>
         </section>
 
         <!-- ADMINISTRAÇÃO -->
         <section id="admin" class="page">
             <div id="adminLockBanner" class="admin-lock-banner" style="display: none;">
-                🔒 Sistema bloqueado. Apenas operações de uso (ações, compras, zerar) estão disponíveis.
+                🔒 Sistema bloqueado. Apenas operações de uso estão disponíveis.
             </div>
             <div class="admin-grid" id="adminGrid">
                 <div class="section">
@@ -119,6 +147,18 @@
                         <button type="submit" class="btn btn-primary">Adicionar</button>
                     </form>
                     <div id="adminAcoesList" class="list-container">
+                        <p class="empty-state">Carregando...</p>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h2>Metas (Templates)</h2>
+                    <form id="formMeta" class="form">
+                        <input type="text" id="metaDescricao" placeholder="Descrição da meta" required>
+                        <input type="number" id="metaPontos" placeholder="Pontos ao concluir" required min="0" value="5">
+                        <button type="submit" class="btn btn-primary">Adicionar Meta</button>
+                    </form>
+                    <div id="adminMetasList" class="list-container">
                         <p class="empty-state">Carregando...</p>
                     </div>
                 </div>
