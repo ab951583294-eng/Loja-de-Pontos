@@ -100,6 +100,8 @@ class LojaDePontos {
         this.xpAtual = 0;
         this.xpParaProximo = 100;
         this.xpNecessarioProximoNivel = 100;
+        this.calendarioDataAtual = new Date();
+        this.historicoDiasMap = {};
         this.init();
     }
 
@@ -131,7 +133,12 @@ class LojaDePontos {
         document.getElementById('selectUser').addEventListener('change', (e) => this.selectUser(e.target.value));
         
         document.querySelectorAll('.main-tabs .tab-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => this.switchMainTab(e.target.dataset.tab));
+            btn.addEventListener('click', (e) => {
+                this.switchMainTab(e.target.dataset.tab);
+                if (e.target.dataset.tab === 'calendario') {
+                    this.carregarCalendario();
+                }
+            });
         });
         
         document.querySelector('#modal .modal-close').addEventListener('click', () => this.hideModal());
@@ -171,10 +178,10 @@ class LojaDePontos {
         const newCode = this.generateRandomCode(32);
         
         body.innerHTML = `
-            <h3> Bloquear Sistema</h3>
+            <h3>🔒 Bloquear Sistema</h3>
             <p>Ao bloquear, você não poderá mais editar recompensas, ações, usuários ou metas. Apenas operações de uso continuarão disponíveis.</p>
             <div class="lock-warning">
-                ⚠️ <strong>Guarde este código!</strong> Ele será necessário para desbloquear. O código muda a cada bloqueio.
+                ️ <strong>Guarde este código!</strong> Ele será necessário para desbloquear. O código muda a cada bloqueio.
             </div>
             <div class="lock-code-display">${newCode}</div>
             <div class="lock-actions">
@@ -377,7 +384,7 @@ class LojaDePontos {
                     </div>
                     <div style="display: flex; gap: 5px; flex-wrap: wrap;">
                         <button class="btn btn-secondary" onclick="app.zerarPontos(${usuario.id})" title="Zerar pontos">↺</button>
-                        <button class="btn btn-secondary" onclick="app.zerarHistorico(${usuario.id})" title="Limpar histórico">✕</button>
+                        <button class="btn btn-secondary" onclick="app.zerarHistorico(${usuario.id})" title="Limpar histórico"></button>
                         <button class="btn btn-danger" onclick="app.deleteUsuario(${usuario.id})">Excluir</button>
                     </div>
                 `;
@@ -1383,7 +1390,7 @@ class LojaDePontos {
                         <div class="stat-label">XP Ganho</div>
                     </div>
                     <div class="stat-box">
-                        <div class="stat-value"> ${resultado.streak_atual}</div>
+                        <div class="stat-value">🔥 ${resultado.streak_atual}</div>
                         <div class="stat-label">Streak</div>
                     </div>
                 </div>
@@ -1452,6 +1459,163 @@ class LojaDePontos {
     formatarData(dataStr) {
         const [ano, mes, dia] = dataStr.split('-');
         return `${dia}/${mes}`;
+    }
+
+    // ============================================================
+    // CALENDÁRIO
+    // ============================================================
+    async carregarCalendario() {
+        if (!this.currentUser) {
+            document.getElementById('calendarioGrid').innerHTML = '<p class="empty-state" style="grid-column: 1/-1;">Selecione um usuário</p>';
+            return;
+        }
+
+        this.showLoading(true);
+        try {
+            const historico = await this.db.query('historico_dias', { usuario_id: this.currentUser.id });
+            this.historicoDiasMap = {};
+            historico.forEach(dia => {
+                this.historicoDiasMap[dia.data] = dia;
+            });
+
+            this.renderizarCalendario();
+        } catch (error) {
+            console.error('Erro ao carregar calendário:', error);
+            document.getElementById('calendarioGrid').innerHTML = '<p class="empty-state" style="grid-column: 1/-1;">Erro ao carregar</p>';
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    renderizarCalendario() {
+        const ano = this.calendarioDataAtual.getFullYear();
+        const mes = this.calendarioDataAtual.getMonth();
+        
+        const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+                       'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+        document.getElementById('calendarioMesAno').textContent = `${meses[mes]} ${ano}`;
+        
+        const primeiroDia = new Date(ano, mes, 1);
+        const ultimoDia = new Date(ano, mes + 1, 0);
+        const diaSemanaInicio = primeiroDia.getDay();
+        const totalDias = ultimoDia.getDate();
+        
+        const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+        
+        let html = '';
+        
+        diasSemana.forEach(dia => {
+            html += `<div class="calendario-dia-semana">${dia}</div>`;
+        });
+        
+        for (let i = 0; i < diaSemanaInicio; i++) {
+            html += `<div class="calendario-dia vazio"></div>`;
+        }
+        
+        const hoje = new Date();
+        for (let dia = 1; dia <= totalDias; dia++) {
+            const dataStr = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+            const dataAtual = new Date(ano, mes, dia);
+            const ehHoje = dataAtual.toDateString() === hoje.toDateString();
+            const ehPassado = dataAtual < hoje;
+            const ehFuturo = dataAtual > hoje;
+            
+            const diaInfo = this.historicoDiasMap[dataStr];
+            
+            let classe = 'calendario-dia';
+            let info = '';
+            let percentual = '';
+            
+            if (ehHoje) {
+                classe += ' hoje';
+            }
+            
+            if (diaInfo) {
+                classe += ' encerrado';
+                info = `${diaInfo.metas_concluidas}/${diaInfo.metas_total}`;
+                percentual = `${diaInfo.percentual_conclusao}%`;
+            } else if (ehPassado) {
+                classe += ' pendente';
+                info = 'Não encerrado';
+            } else {
+                info = 'Futuro';
+            }
+            
+            html += `
+                <div class="${classe}" onclick="${diaInfo || ehPassado ? `app.clicarDia('${dataStr}')` : ''}">
+                    <div class="calendario-dia-numero">${dia}</div>
+                    ${info ? `<div class="calendario-dia-info">${info}</div>` : ''}
+                    ${percentual ? `<div class="calendario-dia-percentual">${percentual}</div>` : ''}
+                </div>
+            `;
+        }
+        
+        document.getElementById('calendarioGrid').innerHTML = html;
+    }
+
+    mudarMes(direcao) {
+        this.calendarioDataAtual.setMonth(this.calendarioDataAtual.getMonth() + direcao);
+        this.renderizarCalendario();
+    }
+
+    async clicarDia(dataStr) {
+        const acao = prompt(`Dia ${this.formatarData(dataStr)}\n\nDigite:\n• "reiniciar" para apagar e refazer\n• "visualizar" para apenas ver`);
+        
+        if (acao === 'reiniciar' || acao === 'REINICIAR') {
+            await this.reiniciarDia(dataStr);
+        } else if (acao === 'visualizar' || acao === 'VISUALIZAR' || acao === '') {
+            await this.visualizarDia(dataStr);
+        }
+    }
+
+    async reiniciarDia(dataStr) {
+        if (!confirm(`⚠️ ATENÇÃO: Isso apagará TODOS os dados do dia ${this.formatarData(dataStr)}\n\nDeseja continuar?`)) return;
+        
+        this.showLoading(true);
+        try {
+            const metas = await this.db.query('metas_do_dia', { 
+                usuario_id: this.currentUser.id, 
+                data: dataStr 
+            });
+            for (const meta of metas) {
+                await this.db.delete('metas_do_dia', meta.id);
+            }
+            
+            const historico = await this.db.query('historico_dias', { 
+                usuario_id: this.currentUser.id, 
+                data: dataStr 
+            });
+            for (const dia of historico) {
+                await this.db.delete('historico_dias', dia.id);
+            }
+            
+            await this.carregarCalendario();
+            await this.carregarStreak();
+            
+            this.showModal('Dia reiniciado', `O dia ${this.formatarData(dataStr)} foi reiniciado.`);
+        } catch (error) {
+            console.error('Erro:', error);
+            this.showModal('Erro', 'Não foi possível reiniciar o dia.');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    async visualizarDia(dataStr) {
+        const diaInfo = this.historicoDiasMap[dataStr];
+        if (!diaInfo) {
+            this.showModal('Dia não encontrado', 'Não há dados para este dia.');
+            return;
+        }
+        
+        const mensagem = ` Dia ${this.formatarData(dataStr)}\n\n` +
+            `✅ Metas: ${diaInfo.metas_concluidas}/${diaInfo.metas_total}\n` +
+            `📈 Conclusão: ${diaInfo.percentual_conclusao}%\n` +
+            `⭐ XP Ganho: ${diaInfo.xp_ganho}\n` +
+            `🔥 Streak: ${diaInfo.streak_atual}\n` +
+            `${diaInfo.recompensa_bonus_nome ? `🎁 Bônus: ${diaInfo.recompensa_bonus_nome}\n` : ''}`;
+        
+        this.showModal('Dados do Dia', mensagem);
     }
 
     // ============================================================
