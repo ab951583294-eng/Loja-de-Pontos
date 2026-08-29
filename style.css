@@ -442,6 +442,22 @@ nav {
     width: auto;
 }
 
+.btn-icon {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 6px 10px;
+    font-size: 1.1rem;
+    cursor: pointer;
+    border-radius: var(--radius);
+    transition: all 0.2s ease;
+}
+
+.btn-icon:hover {
+    background: var(--border);
+    color: var(--danger);
+}
+
 .form {
     display: flex;
     flex-direction: column;
@@ -969,6 +985,12 @@ nav {
     font-size: 0.85rem;
     color: var(--text-muted);
     white-space: nowrap;
+    margin-right: 8px;
+}
+
+.meta-actions {
+    display: flex;
+    gap: 4px;
 }
 
 .encerrar-dia-btn {
