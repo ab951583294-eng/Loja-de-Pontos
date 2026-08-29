@@ -91,14 +91,34 @@
                     </div>
                 </div>
 
-                <!-- Streak display -->
-                <div class="streak-display">
-                    <div class="streak-fire">🔥</div>
-                    <div class="streak-info">
-                        <div class="streak-count" id="streakCount">0</div>
-                        <div class="streak-label">dias seguidos</div>
+                <!-- Streak e XP display -->
+                <div class="streak-xp-display">
+                    <div class="streak-section">
+                        <div class="streak-fire">🔥</div>
+                        <div class="streak-info">
+                            <div class="streak-label">Sequência Atual</div>
+                            <div class="streak-count" id="streakAtual">0</div>
+                            <div class="streak-dias">dias</div>
+                        </div>
+                        <button class="btn btn-danger btn-small" onclick="app.zerarStreak()" title="Zerar sequência">✕</button>
                     </div>
-                    <div class="streak-next" id="streakNext">Próximo marco: 15 dias</div>
+                    <div class="streak-section">
+                        <div class="streak-trophy">🏆</div>
+                        <div class="streak-info">
+                            <div class="streak-label">Maior Sequência</div>
+                            <div class="streak-count" id="maiorStreak">0</div>
+                            <div class="streak-dias">dias</div>
+                        </div>
+                    </div>
+                    <div class="xp-section">
+                        <div class="xp-info">
+                            <div class="xp-label">Nível <span id="nivelAtual">1</span></div>
+                            <div class="xp-bar-container">
+                                <div class="xp-bar" id="xpBar" style="width: 0%"></div>
+                            </div>
+                            <div class="xp-progress" id="xpProgress">0/100 XP</div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Conteúdo do dia -->
@@ -155,7 +175,6 @@
                     <h2>Metas (Templates)</h2>
                     <form id="formMeta" class="form">
                         <input type="text" id="metaDescricao" placeholder="Descrição da meta" required>
-                        <input type="number" id="metaPontos" placeholder="Pontos ao concluir" required min="0" value="5">
                         <button type="submit" class="btn btn-primary">Adicionar Meta</button>
                     </form>
                     <div id="adminMetasList" class="list-container">
