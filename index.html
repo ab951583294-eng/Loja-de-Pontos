@@ -84,11 +84,20 @@
             <!-- METAS DO DIA -->
             <div id="tab-metas" class="tab-content">
                 <div id="diaPendenteBanner" class="dia-pendente-banner" style="display: none;">
-                    <p>️ Você tem um dia pendente não encerrado.</p>
+                    <p>⚠️ Você tem um dia pendente não encerrado.</p>
                     <div class="dia-pendente-actions">
                         <button class="btn btn-secondary" onclick="app.pularDiaPendente()">Pular dia (perde streak)</button>
                         <button class="btn btn-primary" onclick="app.irParaDiaPendente()">Ver dia pendente</button>
                     </div>
+                </div>
+
+                <!-- Seletor de data -->
+                <div class="data-selector">
+                    <label for="dataMetas">Editar dia:</label>
+                    <select id="dataMetas">
+                        <option value="">Carregando...</option>
+                    </select>
+                    <span class="data-selector-info">Só é possível editar hoje ou ontem</span>
                 </div>
 
                 <div class="streak-xp-display">
@@ -142,7 +151,7 @@
         <!-- ADMINISTRAÇÃO -->
         <section id="admin" class="page">
             <div id="adminLockBanner" class="admin-lock-banner" style="display: none;">
-                 Sistema bloqueado. Apenas operações de uso estão disponíveis.
+                🔒 Sistema bloqueado. Apenas operações de uso estão disponíveis.
             </div>
             <div class="admin-grid" id="adminGrid">
                 <div class="section">
