@@ -78,12 +78,15 @@ class LojaDePontos {
         this.db = new Database();
         this.currentUser = null;
         this.activeTimers = {};
+        this.isLocked = false;
+        this.lockCode = null;
         this.init();
     }
 
     async init() {
         try {
             this.setupEventListeners();
+            this.checkLockStatus();
             this.showLoading(true);
             await Promise.all([
                 this.loadUsuarios(),
@@ -91,6 +94,7 @@ class LojaDePontos {
                 this.loadRecompensas()
             ]);
             this.setupAdminForms();
+            this.applyLockUI();
         } catch (error) {
             console.error('Erro ao inicializar:', error);
             this.showModal('Erro', 'Não foi possível conectar.');
@@ -102,26 +106,254 @@ class LojaDePontos {
     setupEventListeners() {
         document.getElementById('btnDashboard').addEventListener('click', () => this.switchPage('dashboard'));
         document.getElementById('btnAdmin').addEventListener('click', () => this.switchPage('admin'));
+        document.getElementById('btnLock').addEventListener('click', () => this.handleLockClick());
         document.getElementById('selectUser').addEventListener('change', (e) => this.selectUser(e.target.value));
         
         document.querySelectorAll('.main-tabs .tab-btn').forEach(btn => {
             btn.addEventListener('click', (e) => this.switchMainTab(e.target.dataset.tab));
         });
         
-        document.querySelectorAll('.history-tabs .tab-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => this.switchHistoryTab(e.target.dataset.tab));
-        });
-        
-        document.querySelector('.modal-close').addEventListener('click', () => this.hideModal());
+        document.querySelector('#modal .modal-close').addEventListener('click', () => this.hideModal());
         document.getElementById('modalBtn').addEventListener('click', () => this.hideModal());
         document.getElementById('modal').addEventListener('click', (e) => {
             if (e.target.id === 'modal') this.hideModal();
         });
     }
 
+    // ============================================================
+    // SISTEMA DE BLOQUEIO
+    // ============================================================
+    checkLockStatus() {
+        const lockData = localStorage.getItem('lojaDePontos_lock');
+        if (lockData) {
+            try {
+                const parsed = JSON.parse(lockData);
+                this.isLocked = true;
+                this.lockCode = parsed.code;
+            } catch (e) {
+                localStorage.removeItem('lojaDePontos_lock');
+            }
+        }
+    }
+
+    handleLockClick() {
+        if (this.isLocked) {
+            this.showUnlockFlow();
+        } else {
+            this.showLockFlow();
+        }
+    }
+
+    showLockFlow() {
+        const modal = document.getElementById('lockModal');
+        const body = document.getElementById('lockModalBody');
+        
+        // Gerar novo código aleatório de 32 caracteres
+        const newCode = this.generateRandomCode(32);
+        
+        body.innerHTML = `
+            <h3> Bloquear Sistema</h3>
+            <p>Ao bloquear, você não poderá mais editar recompensas, ações ou usuários. Apenas operações de uso (registrar ações, comprar, zerar pontos/histórico) continuarão disponíveis.</p>
+            <div class="lock-warning">
+                ⚠️ <strong>Guarde este código!</strong> Ele será necessário para desbloquear. O código muda a cada bloqueio.
+            </div>
+            <div class="lock-code-display" id="generatedCode">${newCode}</div>
+            <div class="lock-actions">
+                <button class="btn btn-secondary" onclick="app.closeLockModal()">Cancelar</button>
+                <button class="btn btn-primary" onclick="app.confirmLock()">Confirmar Bloqueio</button>
+            </div>
+        `;
+        
+        // Guardar o código temporariamente
+        this._pendingLockCode = newCode;
+        
+        modal.classList.add('active');
+    }
+
+    confirmLock() {
+        this.lockCode = this._pendingLockCode;
+        this._pendingLockCode = null;
+        this.isLocked = true;
+        localStorage.setItem('lojaDePontos_lock', JSON.stringify({ code: this.lockCode }));
+        this.closeLockModal();
+        this.applyLockUI();
+        this.showModal('Sistema Bloqueado', 'O sistema foi bloqueado. Anote o código em um local seguro!');
+    }
+
+    showUnlockFlow() {
+        const modal = document.getElementById('lockModal');
+        const body = document.getElementById('lockModalBody');
+        
+        body.innerHTML = `
+            <h3>🔓 Desbloquear Sistema</h3>
+            <p>Digite o código abaixo para desbloquear:</p>
+            <div class="lock-code-display" id="unlockCodeDisplay">${this.lockCode}</div>
+            <div class="lock-warning">
+                📝 Digite o código exatamente como aparece acima. Copiar e colar está desabilitado.
+            </div>
+            <input type="text" id="unlockCodeInput" class="lock-input" placeholder="Digite o código aqui..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+            <div class="lock-actions">
+                <button class="btn btn-secondary" onclick="app.closeLockModal()">Cancelar</button>
+                <button class="btn btn-primary" onclick="app.confirmUnlock()">Desbloquear</button>
+            </div>
+        `;
+        
+        modal.classList.add('active');
+        
+        // Aplicar proteções anti-copiar/colar no input
+        setTimeout(() => {
+            this.setupAntiCopyPaste();
+            const input = document.getElementById('unlockCodeInput');
+            if (input) input.focus();
+        }, 100);
+    }
+
+    setupAntiCopyPaste() {
+        const input = document.getElementById('unlockCodeInput');
+        if (!input) return;
+        
+        // Bloquear colar
+        input.addEventListener('paste', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+        });
+        
+        // Bloquear copiar
+        input.addEventListener('copy', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+        });
+        
+        // Bloquear cortar
+        input.addEventListener('cut', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+        });
+        
+        // Bloquear arrastar e soltar
+        input.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+        });
+        
+        input.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+        });
+        
+        // Bloquear menu de contexto (botão direito no PC, long-press no celular)
+        input.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+        });
+        
+        // Bloquear seleção (impede copiar via seleção)
+        input.addEventListener('selectstart', (e) => {
+            // Permitir seleção para digitar, mas não para copiar
+        });
+        
+        // Bloquear eventos globais de copiar/colar quando o modal está aberto
+        document.addEventListener('paste', this._globalPasteHandler);
+        document.addEventListener('copy', this._globalCopyHandler);
+    }
+
+    removeAntiCopyPaste() {
+        document.removeEventListener('paste', this._globalPasteHandler);
+        document.removeEventListener('copy', this._globalCopyHandler);
+    }
+
+    confirmUnlock() {
+        const input = document.getElementById('unlockCodeInput');
+        if (!input) return;
+        
+        const code = input.value.trim();
+        
+        if (!code) {
+            this.showModal('Código vazio', 'Digite o código para desbloquear.');
+            return;
+        }
+        
+        if (code === this.lockCode) {
+            // Código correto - gerar novo código para o próximo bloqueio
+            this.isLocked = false;
+            this.lockCode = null;
+            localStorage.removeItem('lojaDePontos_lock');
+            this.closeLockModal();
+            this.applyLockUI();
+            this.showModal('Sistema Desbloqueado', 'O sistema foi desbloqueado com sucesso!');
+        } else {
+            this.showModal('Código Incorreto', 'O código digitado não corresponde. Tente novamente.');
+            input.value = '';
+            input.focus();
+        }
+    }
+
+    closeLockModal() {
+        document.getElementById('lockModal').classList.remove('active');
+        this.removeAntiCopyPaste();
+        this._pendingLockCode = null;
+    }
+
+    applyLockUI() {
+        const lockBtn = document.getElementById('btnLock');
+        const adminBanner = document.getElementById('adminLockBanner');
+        const adminForms = document.querySelectorAll('#adminGrid .form');
+        const deleteButtons = document.querySelectorAll('.btn-danger');
+        
+        if (this.isLocked) {
+            lockBtn.textContent = '🔒';
+            lockBtn.classList.add('is-locked');
+            if (adminBanner) adminBanner.style.display = 'block';
+            
+            // Desabilitar formulários de administração
+            adminForms.forEach(form => {
+                form.style.display = 'none';
+            });
+            
+            // Esconder botões de excluir
+            deleteButtons.forEach(btn => {
+                btn.style.display = 'none';
+            });
+        } else {
+            lockBtn.textContent = '🔓';
+            lockBtn.classList.remove('is-locked');
+            if (adminBanner) adminBanner.style.display = 'none';
+            
+            // Reabilitar formulários
+            adminForms.forEach(form => {
+                form.style.display = 'flex';
+            });
+            
+            // Mostrar botões de excluir
+            deleteButtons.forEach(btn => {
+                btn.style.display = 'inline-block';
+            });
+        }
+    }
+
+    generateRandomCode(length) {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+        let code = '';
+        const array = new Uint32Array(length);
+        crypto.getRandomValues(array);
+        for (let i = 0; i < length; i++) {
+            code += chars.charAt(array[i] % chars.length);
+        }
+        return code;
+    }
+
+    // ============================================================
+    // NAVEGAÇÃO
+    // ============================================================
     switchPage(page) {
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.nav-btn:not(.lock-btn)').forEach(b => b.classList.remove('active'));
         document.getElementById(page).classList.add('active');
         const btnId = page === 'dashboard' ? 'btnDashboard' : 'btnAdmin';
         document.getElementById(btnId).classList.add('active');
@@ -142,13 +374,6 @@ class LojaDePontos {
         }
     }
 
-    switchHistoryTab(tab) {
-        document.querySelectorAll('.history-tabs .tab-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.history-content').forEach(c => c.classList.remove('active'));
-        document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
-        document.getElementById(`historico${tab.charAt(0).toUpperCase() + tab.slice(1)}`).classList.add('active');
-    }
-
     showLoading(show) {
         const loading = document.getElementById('loading');
         if (show) loading.classList.add('active');
@@ -163,7 +388,6 @@ class LojaDePontos {
         const select = document.getElementById('selectUser');
         const usuariosList = document.getElementById('usuariosList');
         
-        // Salvar seleção atual
         const selectedUserId = this.currentUser ? this.currentUser.id : select.value;
         
         select.innerHTML = '<option value="">-- Selecione --</option>';
@@ -174,7 +398,6 @@ class LojaDePontos {
             select.appendChild(option);
         });
         
-        // Restaurar seleção
         if (selectedUserId) {
             select.value = selectedUserId;
         }
@@ -191,8 +414,8 @@ class LojaDePontos {
                         <div class="list-item-name">${usuario.nome}</div>
                         <div class="list-item-points">${usuario.pontos_totais} pontos</div>
                     </div>
-                    <div style="display: flex; gap: 5px;">
-                        <button class="btn btn-secondary" onclick="app.zerarPontos(${usuario.id})" title="Zerar">↺</button>
+                    <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                        <button class="btn btn-secondary" onclick="app.zerarPontos(${usuario.id})" title="Zerar pontos">↺</button>
                         <button class="btn btn-secondary" onclick="app.zerarHistorico(${usuario.id})" title="Limpar histórico">✕</button>
                         <button class="btn btn-danger" onclick="app.deleteUsuario(${usuario.id})">Excluir</button>
                     </div>
@@ -207,7 +430,6 @@ class LojaDePontos {
             this.currentUser = null;
             document.getElementById('totalPoints').textContent = '0';
             document.getElementById('historicoAcoes').innerHTML = '<p class="empty-state">Selecione um usuário</p>';
-            document.getElementById('historicoCompras').innerHTML = '<p class="empty-state">Selecione um usuário</p>';
             document.getElementById('comprasAtivasList').innerHTML = '<p class="empty-state">Selecione um usuário</p>';
             return;
         }
@@ -367,7 +589,6 @@ class LojaDePontos {
         });
     }
 
-    // Comprar recompensa de tempo (vai para Minhas Compras)
     async comprarRecompensaTempo(recompensaId) {
         if (!this.currentUser) {
             this.showModal('Atenção', 'Selecione um usuário.');
@@ -416,7 +637,6 @@ class LojaDePontos {
         }
     }
 
-    // Comprar recompensa sem tempo (ticket para usar depois)
     async comprarRecompensaTicket(recompensaId) {
         if (!this.currentUser) {
             this.showModal('Atenção', 'Selecione um usuário.');
@@ -501,7 +721,6 @@ class LojaDePontos {
                 const temTempo = recompensa.tempo_minutos > 0;
                 
                 if (temTempo) {
-                    // Recompensa de tempo - mostrar timer
                     const tempoFormatado = this.formatarTempo(compra.tempo_restante_segundos);
                     const status = compra.pausada ? 'Pausado' : 'Em andamento';
                     
@@ -525,7 +744,6 @@ class LojaDePontos {
                         this.iniciarTimerVisual(compra.id, compra.tempo_restante_segundos);
                     }
                 } else {
-                    // Recompensa sem tempo - ticket para usar
                     card.innerHTML = `
                         <h3>${recompensa.nome}</h3>
                         <div class="timer-status">Ticket disponível</div>
@@ -653,7 +871,6 @@ class LojaDePontos {
         }
     }
 
-    // Usar ticket (recompensa sem tempo)
     async usarTicket(compraId) {
         if (!confirm('Confirmar uso deste ticket?')) return;
         
@@ -674,7 +891,6 @@ class LojaDePontos {
         }
     }
 
-    // Cancelar ticket (sem devolver pontos)
     async cancelarTicket(compraId) {
         if (!confirm('Cancelar este ticket? Os pontos NÃO serão devolvidos.')) return;
         
@@ -701,7 +917,7 @@ class LojaDePontos {
     }
 
     // ============================================================
-    // ZERAR
+    // ZERAR (permitido mesmo bloqueado)
     // ============================================================
     async zerarPontos(usuarioId) {
         if (!confirm('Zerar os pontos?')) return;
@@ -746,6 +962,7 @@ class LojaDePontos {
     // ============================================================
     async loadHistorico() {
         if (!this.currentUser) return;
+        
         this.showLoading(true);
         try {
             const historicoAcoes = await this.db.getAll('historico_acoes');
@@ -775,33 +992,6 @@ class LojaDePontos {
                     acoesList.appendChild(item);
                 });
             }
-
-            const historicoCompras = await this.db.getAll('historico_compras');
-            const comprasUsuario = historicoCompras
-                .filter(h => h.usuario_id === this.currentUser.id)
-                .sort((a, b) => new Date(b.data) - new Date(a.data))
-                .slice(0, 20);
-            
-            const comprasList = document.getElementById('historicoCompras');
-            comprasList.innerHTML = '';
-            if (comprasUsuario.length === 0) {
-                comprasList.innerHTML = '<p class="empty-state">Nenhum registro</p>';
-            } else {
-                const recompensas = await this.db.getAll('recompensas');
-                comprasUsuario.forEach(h => {
-                    const r = recompensas.find(x => x.id === h.recompensa_id);
-                    const item = document.createElement('div');
-                    item.className = 'history-item';
-                    item.innerHTML = `
-                        <div>
-                            <div class="list-item-name">${r ? r.nome : '(removida)'}</div>
-                            <div class="history-date">${new Date(h.data).toLocaleString('pt-BR')}</div>
-                        </div>
-                        <div class="history-points negative">-${h.pontos_gastos}</div>
-                    `;
-                    comprasList.appendChild(item);
-                });
-            }
         } catch (error) {
             console.error('Erro:', error);
         } finally {
@@ -810,11 +1000,16 @@ class LojaDePontos {
     }
 
     // ============================================================
-    // FORMULÁRIOS
+    // FORMULÁRIOS (bloqueados quando isLocked)
     // ============================================================
     setupAdminForms() {
         document.getElementById('formUsuario').addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (this.isLocked) {
+                this.showModal('Sistema Bloqueado', 'Desbloqueie o sistema para adicionar usuários.');
+                return;
+            }
+            
             const nome = document.getElementById('usuarioNome').value.trim();
             if (nome) {
                 this.showLoading(true);
@@ -833,6 +1028,11 @@ class LojaDePontos {
 
         document.getElementById('formRecompensa').addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (this.isLocked) {
+                this.showModal('Sistema Bloqueado', 'Desbloqueie o sistema para adicionar recompensas.');
+                return;
+            }
+            
             const nome = document.getElementById('recompensaNome').value.trim();
             const custo = parseInt(document.getElementById('recompensaCusto').value);
             const tempo = parseInt(document.getElementById('recompensaTempo').value) || 0;
@@ -857,6 +1057,11 @@ class LojaDePontos {
 
         document.getElementById('formAcao').addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (this.isLocked) {
+                this.showModal('Sistema Bloqueado', 'Desbloqueie o sistema para adicionar ações.');
+                return;
+            }
+            
             const descricao = document.getElementById('acaoDescricao').value.trim();
             const valor = parseInt(document.getElementById('acaoValor').value);
             if (descricao && !isNaN(valor)) {
@@ -876,9 +1081,14 @@ class LojaDePontos {
     }
 
     // ============================================================
-    // EXCLUSÃO
+    // EXCLUSÃO (bloqueada quando isLocked)
     // ============================================================
     async deleteUsuario(id) {
+        if (this.isLocked) {
+            this.showModal('Sistema Bloqueado', 'Desbloqueie o sistema para excluir.');
+            return;
+        }
+        
         if (!confirm('Excluir usuário? Tudo será apagado.')) return;
         this.showLoading(true);
         try {
@@ -897,6 +1107,11 @@ class LojaDePontos {
     }
 
     async deleteAcao(id) {
+        if (this.isLocked) {
+            this.showModal('Sistema Bloqueado', 'Desbloqueie o sistema para excluir.');
+            return;
+        }
+        
         if (!confirm('Excluir ação?')) return;
         this.showLoading(true);
         try {
@@ -910,6 +1125,11 @@ class LojaDePontos {
     }
 
     async deleteRecompensa(id) {
+        if (this.isLocked) {
+            this.showModal('Sistema Bloqueado', 'Desbloqueie o sistema para excluir.');
+            return;
+        }
+        
         if (!confirm('Excluir recompensa?')) return;
         this.showLoading(true);
         try {
@@ -935,5 +1155,24 @@ class LojaDePontos {
         document.getElementById('modal').classList.remove('active');
     }
 }
+
+// Handlers globais para bloquear copiar/colar em toda a página quando o modal de desbloqueio está aberto
+LojaDePontos.prototype._globalPasteHandler = function(e) {
+    const lockModal = document.getElementById('lockModal');
+    if (lockModal && lockModal.classList.contains('active')) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+    }
+};
+
+LojaDePontos.prototype._globalCopyHandler = function(e) {
+    const lockModal = document.getElementById('lockModal');
+    if (lockModal && lockModal.classList.contains('active')) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+    }
+};
 
 const app = new LojaDePontos();
