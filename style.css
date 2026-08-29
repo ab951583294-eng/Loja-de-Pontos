@@ -9,6 +9,7 @@
     --danger: #666666;
     --danger-hover: #333333;
     --success: #555555;
+    --warning: #888888;
     --radius: 8px;
     --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
@@ -25,6 +26,15 @@ body {
     color: var(--text);
     min-height: 100vh;
     line-height: 1.5;
+}
+
+body.locked {
+    filter: grayscale(100%) blur(2px);
+    pointer-events: none;
+}
+
+body.locked .lock-overlay {
+    display: flex;
 }
 
 .container {
@@ -76,6 +86,16 @@ nav {
     background: var(--primary);
     color: white;
     border-color: var(--primary);
+}
+
+.lock-btn {
+    font-size: 1.1rem;
+    padding: 8px 12px;
+}
+
+.lock-btn.locked {
+    background: var(--warning);
+    color: white;
 }
 
 .page {
@@ -524,6 +544,10 @@ nav {
     border: 1px solid var(--border);
 }
 
+.lock-modal {
+    max-width: 500px;
+}
+
 .modal-close {
     position: absolute;
     top: 12px;
@@ -547,6 +571,45 @@ nav {
     margin-bottom: 20px;
     color: var(--text-muted);
     font-size: 0.95rem;
+}
+
+.lock-code-display {
+    background: var(--bg);
+    padding: 16px;
+    border-radius: var(--radius);
+    font-family: 'Courier New', monospace;
+    font-size: 1.1rem;
+    letter-spacing: 2px;
+    text-align: center;
+    margin: 16px 0;
+    border: 1px solid var(--border);
+    word-break: break-all;
+}
+
+.lock-input {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 1rem;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 1px;
+    margin: 16px 0;
+}
+
+.lock-input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.lock-warning {
+    background: var(--bg);
+    padding: 12px;
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin: 12px 0;
+    border-left: 3px solid var(--warning);
 }
 
 .admin-grid {
