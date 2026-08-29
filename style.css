@@ -158,21 +158,17 @@ nav {
     text-transform: lowercase;
 }
 
-.dashboard-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
+.main-tabs {
     margin-bottom: 20px;
+    justify-content: center;
 }
 
-@media (max-width: 768px) {
-    .dashboard-grid, .admin-grid {
-        grid-template-columns: 1fr;
-    }
-    
-    .points-value {
-        font-size: 2.5rem;
-    }
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
 }
 
 .section {
@@ -237,7 +233,7 @@ nav {
 
 .cards-container {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
     gap: 12px;
 }
 
@@ -247,11 +243,6 @@ nav {
     padding: 16px;
     text-align: center;
     border: 1px solid var(--border);
-    transition: all 0.2s ease;
-}
-
-.reward-card:hover {
-    border-color: var(--primary);
 }
 
 .reward-card img {
@@ -276,15 +267,32 @@ nav {
 }
 
 .timer-display {
-    font-size: 1.3rem;
+    font-size: 2rem;
     font-weight: 300;
     color: var(--text);
-    margin-bottom: 10px;
+    margin-bottom: 12px;
     font-family: 'Courier New', monospace;
-    padding: 8px;
+    padding: 12px;
     border-radius: var(--radius);
     border: 1px solid var(--border);
     background: var(--card);
+    letter-spacing: 2px;
+}
+
+.timer-status {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    padding: 4px 8px;
+    background: var(--card);
+    border-radius: var(--radius);
+    display: inline-block;
+}
+
+.timer-controls {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
 }
 
 .btn {
@@ -355,6 +363,48 @@ nav {
     background: var(--border);
     color: var(--text-muted);
     cursor: not-allowed;
+}
+
+.btn-start {
+    background: var(--text);
+    color: white;
+    flex: 1;
+}
+
+.btn-start:hover {
+    background: var(--primary-hover);
+}
+
+.btn-pause {
+    background: var(--text-muted);
+    color: white;
+    flex: 1;
+}
+
+.btn-pause:hover {
+    background: var(--text);
+}
+
+.btn-interrupt {
+    background: var(--danger);
+    color: white;
+    flex: 1;
+}
+
+.btn-interrupt:hover {
+    background: var(--danger-hover);
+}
+
+.btn-revoke {
+    background: var(--border);
+    color: var(--text);
+    width: 100%;
+    margin-top: 8px;
+}
+
+.btn-revoke:hover {
+    background: var(--danger);
+    color: white;
 }
 
 .form {
@@ -541,4 +591,22 @@ nav {
 .loading-overlay p {
     color: var(--text-muted);
     font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+    .dashboard-grid, .admin-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .points-value {
+        font-size: 2.5rem;
+    }
+    
+    .timer-controls {
+        flex-direction: column;
+    }
+    
+    .timer-controls .btn {
+        width: 100%;
+    }
 }
