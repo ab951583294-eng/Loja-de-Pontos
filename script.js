@@ -281,13 +281,13 @@ class LojaDePontos {
         const deleteButtons = document.querySelectorAll('.btn-danger');
         
         if (this.isLocked) {
-            lockBtn.textContent = '';
+            lockBtn.textContent = 'BLOQ';
             lockBtn.classList.add('is-locked');
             if (adminBanner) adminBanner.style.display = 'block';
             adminForms.forEach(form => { form.style.display = 'none'; });
             deleteButtons.forEach(btn => { btn.style.display = 'none'; });
         } else {
-            lockBtn.textContent = '🔓';
+            lockBtn.textContent = 'LIVRE';
             lockBtn.classList.remove('is-locked');
             if (adminBanner) adminBanner.style.display = 'none';
             adminForms.forEach(form => { form.style.display = 'flex'; });
