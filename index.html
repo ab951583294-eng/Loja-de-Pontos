@@ -82,7 +82,10 @@
 
         <!-- ADMINISTRAÇÃO -->
         <section id="admin" class="page">
-            <div class="admin-grid">
+            <div id="adminLockBanner" class="admin-lock-banner" style="display: none;">
+                🔒 Sistema bloqueado. Apenas operações de uso (ações, compras, zerar) estão disponíveis.
+            </div>
+            <div class="admin-grid" id="adminGrid">
                 <div class="section">
                     <h2>Usuários</h2>
                     <form id="formUsuario" class="form">
@@ -133,12 +136,10 @@
         </div>
     </div>
 
-    <!-- MODAL DE BLOQUEIO -->
-    <div id="lockModal" class="modal">
-        <div class="modal-content lock-modal">
-            <span class="modal-close" onclick="app.closeLockModal()">&times;</span>
-            <h3 id="lockModalTitle">Bloquear Sistema</h3>
-            <div id="lockModalContent"></div>
+    <!-- MODAL DE BLOQUEIO/DESBLOQUEIO -->
+    <div id="lockModal" class="modal lock-modal-overlay">
+        <div class="modal-content lock-modal-content">
+            <div id="lockModalBody"></div>
         </div>
     </div>
 
