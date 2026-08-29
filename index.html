@@ -83,16 +83,14 @@
 
             <!-- METAS DO DIA -->
             <div id="tab-metas" class="tab-content">
-                <!-- Aviso de dia pendente -->
                 <div id="diaPendenteBanner" class="dia-pendente-banner" style="display: none;">
-                    <p>⚠️ Você tem um dia pendente não encerrado.</p>
+                    <p>️ Você tem um dia pendente não encerrado.</p>
                     <div class="dia-pendente-actions">
                         <button class="btn btn-secondary" onclick="app.pularDiaPendente()">Pular dia (perde streak)</button>
                         <button class="btn btn-primary" onclick="app.irParaDiaPendente()">Ver dia pendente</button>
                     </div>
                 </div>
 
-                <!-- Streak e XP display -->
                 <div class="streak-xp-display">
                     <div class="streak-section">
                         <div class="streak-fire">🔥</div>
@@ -122,7 +120,6 @@
                     </div>
                 </div>
 
-                <!-- Conteúdo do dia -->
                 <div id="metasDiaContent">
                     <p class="empty-state">Selecione um usuário para ver as metas</p>
                 </div>
@@ -137,7 +134,6 @@
                         <button class="btn btn-secondary" onclick="app.mudarMes(1)">Próximo →</button>
                     </div>
                     <div id="calendarioGrid" class="calendario-grid">
-                        <!-- Dias serão gerados via JS -->
                     </div>
                 </div>
             </div>
@@ -146,7 +142,7 @@
         <!-- ADMINISTRAÇÃO -->
         <section id="admin" class="page">
             <div id="adminLockBanner" class="admin-lock-banner" style="display: none;">
-                🔒 Sistema bloqueado. Apenas operações de uso estão disponíveis.
+                 Sistema bloqueado. Apenas operações de uso estão disponíveis.
             </div>
             <div class="admin-grid" id="adminGrid">
                 <div class="section">
@@ -200,7 +196,6 @@
         </section>
     </main>
 
-    <!-- MODAL DE CONFIRMAÇÃO -->
     <div id="modal" class="modal">
         <div class="modal-content">
             <span class="modal-close">&times;</span>
@@ -210,7 +205,6 @@
         </div>
     </div>
 
-    <!-- MODAL DE BLOQUEIO/DESBLOQUEIO -->
     <div id="lockModal" class="modal lock-modal-overlay">
         <div class="modal-content lock-modal-content">
             <div id="lockModalBody"></div>
