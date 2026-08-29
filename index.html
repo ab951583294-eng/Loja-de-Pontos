@@ -3,15 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Loja de Pontos - Gamificação Familiar</title>
+    <title>Loja de Pontos</title>
     <link rel="stylesheet" href="style.css">
-    <!-- SDK do Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <header>
         <div class="container">
-            <h1>🏆 Loja de Pontos</h1>
+            <h1>Loja de Pontos</h1>
             <nav>
                 <button id="btnDashboard" class="nav-btn active">Dashboard</button>
                 <button id="btnAdmin" class="nav-btn">Administração</button>
@@ -23,7 +22,7 @@
         <!-- DASHBOARD -->
         <section id="dashboard" class="page active">
             <div class="user-selector">
-                <label for="selectUser">👤 Selecione o Usuário:</label>
+                <label for="selectUser">Usuário:</label>
                 <select id="selectUser">
                     <option value="">-- Selecione --</option>
                 </select>
@@ -31,42 +30,39 @@
 
             <div class="points-display">
                 <div class="points-box">
-                    <span class="points-label">Saldo de Pontos</span>
+                    <span class="points-label">Saldo</span>
                     <span id="totalPoints" class="points-value">0</span>
-                    <span class="points-icon">⭐</span>
+                    <span class="points-icon">pts</span>
                 </div>
             </div>
 
             <div class="dashboard-grid">
-                <!-- AÇÕES -->
                 <div class="section">
-                    <h2>📋 Ações Disponíveis</h2>
+                    <h2>Ações</h2>
                     <div id="acoesList" class="list-container">
                         <p class="empty-state">Carregando...</p>
                     </div>
                 </div>
 
-                <!-- RECOMPENSAS -->
                 <div class="section">
-                    <h2>🎁 Recompensas</h2>
+                    <h2>Recompensas</h2>
                     <div id="recompensasList" class="cards-container">
                         <p class="empty-state">Carregando...</p>
                     </div>
                 </div>
             </div>
 
-            <!-- HISTÓRICO -->
             <div class="section">
-                <h2>📊 Histórico</h2>
+                <h2>Histórico</h2>
                 <div class="history-tabs">
                     <button class="tab-btn active" data-tab="acoes">Ações</button>
                     <button class="tab-btn" data-tab="compras">Compras</button>
                 </div>
                 <div id="historicoAcoes" class="history-content active">
-                    <p class="empty-state">Selecione um usuário para ver o histórico</p>
+                    <p class="empty-state">Selecione um usuário</p>
                 </div>
                 <div id="historicoCompras" class="history-content">
-                    <p class="empty-state">Selecione um usuário para ver o histórico</p>
+                    <p class="empty-state">Selecione um usuário</p>
                 </div>
             </div>
         </section>
@@ -74,40 +70,37 @@
         <!-- ADMINISTRAÇÃO -->
         <section id="admin" class="page">
             <div class="admin-grid">
-                <!-- GERENCIAR USUÁRIOS -->
                 <div class="section">
-                    <h2>👥 Usuários</h2>
+                    <h2>Usuários</h2>
                     <form id="formUsuario" class="form">
                         <input type="text" id="usuarioNome" placeholder="Nome do usuário" required>
-                        <button type="submit" class="btn btn-primary">Adicionar Usuário</button>
+                        <button type="submit" class="btn btn-primary">Adicionar</button>
                     </form>
                     <div id="usuariosList" class="list-container">
                         <p class="empty-state">Carregando...</p>
                     </div>
                 </div>
 
-                <!-- GERENCIAR RECOMPENSAS -->
                 <div class="section">
-                    <h2>🎁 Gerenciar Recompensas</h2>
+                    <h2>Recompensas</h2>
                     <form id="formRecompensa" class="form">
-                        <input type="text" id="recompensaNome" placeholder="Nome da recompensa" required>
+                        <input type="text" id="recompensaNome" placeholder="Nome" required>
                         <input type="number" id="recompensaCusto" placeholder="Custo em pontos" required min="1">
                         <input type="number" id="recompensaTempo" placeholder="Tempo em minutos (0 = sem tempo)" min="0" value="0">
                         <input type="url" id="recompensaImagem" placeholder="URL da imagem (opcional)">
-                        <button type="submit" class="btn btn-primary">Adicionar Recompensa</button>
+                        <button type="submit" class="btn btn-primary">Adicionar</button>
                     </form>
                     <div id="adminRecompensasList" class="list-container">
                         <p class="empty-state">Carregando...</p>
                     </div>
                 </div>
 
-                <!-- GERENCIAR AÇÕES -->
                 <div class="section">
-                    <h2>📋 Gerenciar Ações</h2>
+                    <h2>Ações</h2>
                     <form id="formAcao" class="form">
-                        <input type="text" id="acaoDescricao" placeholder="Descrição da ação" required>
+                        <input type="text" id="acaoDescricao" placeholder="Descrição" required>
                         <input type="number" id="acaoValor" placeholder="Pontos (+ ou -)" required>
-                        <button type="submit" class="btn btn-primary">Adicionar Ação</button>
+                        <button type="submit" class="btn btn-primary">Adicionar</button>
                     </form>
                     <div id="adminAcoesList" class="list-container">
                         <p class="empty-state">Carregando...</p>
@@ -117,7 +110,6 @@
         </section>
     </main>
 
-    <!-- MODAL DE CONFIRMAÇÃO -->
     <div id="modal" class="modal">
         <div class="modal-content">
             <span class="modal-close">&times;</span>
@@ -127,7 +119,6 @@
         </div>
     </div>
 
-    <!-- LOADING OVERLAY -->
     <div id="loading" class="loading-overlay">
         <div class="spinner"></div>
         <p>Carregando...</p>
