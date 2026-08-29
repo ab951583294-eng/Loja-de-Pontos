@@ -57,6 +57,20 @@ class Database {
         if (error) throw error;
         return true;
     }
+
+    async query(table, filters) {
+        let query = supabaseClient.from(table).select('*');
+        
+        if (filters) {
+            Object.keys(filters).forEach(key => {
+                query = query.eq(key, filters[key]);
+            });
+        }
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        return data || [];
+    }
 }
 
 // ============================================================
@@ -66,6 +80,7 @@ class LojaDePontos {
     constructor() {
         this.db = new Database();
         this.currentUser = null;
+        this.activeTimers = {}; // Armazena timers ativos
         this.init();
     }
 
@@ -124,6 +139,11 @@ class LojaDePontos {
         document.getElementById(page).classList.add('active');
         const btnId = page === 'dashboard' ? 'btnDashboard' : 'btnAdmin';
         document.getElementById(btnId).classList.add('active');
+        
+        // Recarregar recompensas ativas ao voltar para dashboard
+        if (page === 'dashboard' && this.currentUser) {
+            this.loadRecompensas();
+        }
     }
 
     switchHistoryTab(tab) {
@@ -173,7 +193,11 @@ class LojaDePontos {
                         <div class="list-item-name">${usuario.nome}</div>
                         <div class="list-item-points">${usuario.pontos_totais} pontos</div>
                     </div>
-                    <button class="btn btn-danger" onclick="app.deleteUsuario(${usuario.id})">Excluir</button>
+                    <div style="display: flex; gap: 5px;">
+                        <button class="btn btn-secondary" onclick="app.zerarPontos(${usuario.id})" title="Zerar pontos">🔄</button>
+                        <button class="btn btn-secondary" onclick="app.zerarHistorico(${usuario.id})" title="Zerar histórico">🗑️</button>
+                        <button class="btn btn-danger" onclick="app.deleteUsuario(${usuario.id})">Excluir</button>
+                    </div>
                 `;
                 usuariosList.appendChild(item);
             });
@@ -307,6 +331,11 @@ class LojaDePontos {
             return;
         }
 
+        // Carregar recompensas ativas do usuário
+        const recompensasAtivas = this.currentUser 
+            ? await this.db.query('recompensas_ativas', { usuario_id: this.currentUser.id, concluida: false })
+            : [];
+
         recompensas.forEach(recompensa => {
             // Cards do dashboard
             const card = document.createElement('div');
@@ -316,16 +345,50 @@ class LojaDePontos {
                 ? `<img src="${recompensa.imagem_url}" alt="${recompensa.nome}" onerror="this.style.display='none'">`
                 : '';
             
-            const canBuy = this.currentUser && this.currentUser.pontos_totais >= recompensa.custo_pontos;
-            const disabled = this.currentUser ? (!canBuy ? 'disabled' : '') : 'disabled';
+            const temTempo = recompensa.tempo_minutos > 0;
+            const recompensaAtiva = recompensasAtivas.find(ra => ra.recompensa_id === recompensa.id);
+            
+            let buttonHTML = '';
+            
+            if (recompensaAtiva) {
+                // Está em andamento - mostrar timer
+                const tempoRestante = this.calcularTempoRestante(recompensaAtiva.data_inicio, recompensa.tempo_minutos);
+                buttonHTML = `
+                    <div class="timer-display" id="timer-${recompensa.id}">${tempoRestante}</div>
+                    <button class="btn btn-secondary" disabled>Em andamento...</button>
+                `;
+                // Iniciar timer visual
+                this.iniciarTimerVisual(recompensa.id, recompensaAtiva.data_inicio, recompensa.tempo_minutos);
+            } else if (this.currentUser) {
+                const canBuy = this.currentUser.pontos_totais >= recompensa.custo_pontos;
+                const disabled = !canBuy ? 'disabled' : '';
+                
+                if (temTempo) {
+                    buttonHTML = `
+                        <div class="reward-cost">⭐ ${recompensa.custo_pontos} pontos | ⏱️ ${recompensa.tempo_minutos}min</div>
+                        <button class="btn btn-buy" onclick="app.iniciarRecompensaTempo(${recompensa.id})" ${disabled}>
+                            ${canBuy ? 'Iniciar' : 'Pontos insuficientes'}
+                        </button>
+                    `;
+                } else {
+                    buttonHTML = `
+                        <div class="reward-cost">⭐ ${recompensa.custo_pontos} pontos</div>
+                        <button class="btn btn-buy" onclick="app.comprarRecompensa(${recompensa.id})" ${disabled}>
+                            ${canBuy ? 'Comprar' : 'Pontos insuficientes'}
+                        </button>
+                    `;
+                }
+            } else {
+                buttonHTML = `
+                    <div class="reward-cost">⭐ ${recompensa.custo_pontos} pontos${temTempo ? ` | ⏱️ ${recompensa.tempo_minutos}min` : ''}</div>
+                    <button class="btn btn-buy" disabled>Selecione usuário</button>
+                `;
+            }
             
             card.innerHTML = `
                 ${imagemHTML}
                 <h3>${recompensa.nome}</h3>
-                <div class="reward-cost">⭐ ${recompensa.custo_pontos} pontos</div>
-                <button class="btn btn-buy" onclick="app.comprarRecompensa(${recompensa.id})" ${disabled}>
-                    ${this.currentUser ? (canBuy ? 'Comprar' : 'Pontos insuficientes') : 'Selecione usuário'}
-                </button>
+                ${buttonHTML}
             `;
             recompensasList.appendChild(card);
 
@@ -335,12 +398,132 @@ class LojaDePontos {
             adminItem.innerHTML = `
                 <div class="list-item-info">
                     <div class="list-item-name">${recompensa.nome}</div>
-                    <div class="list-item-points">⭐ ${recompensa.custo_pontos} pontos</div>
+                    <div class="list-item-points">⭐ ${recompensa.custo_pontos} pontos${temTempo ? ` | ⏱️ ${recompensa.tempo_minutos}min` : ''}</div>
                 </div>
                 <button class="btn btn-danger" onclick="app.deleteRecompensa(${recompensa.id})">Excluir</button>
             `;
             adminRecompensasList.appendChild(adminItem);
         });
+    }
+
+    calcularTempoRestante(dataInicio, tempoMinutos) {
+        const inicio = new Date(dataInicio);
+        const fim = new Date(inicio.getTime() + tempoMinutos * 60000);
+        const agora = new Date();
+        const diff = fim - agora;
+        
+        if (diff <= 0) return '00:00';
+        
+        const minutos = Math.floor(diff / 60000);
+        const segundos = Math.floor((diff % 60000) / 1000);
+        return `${minutos.toString().padStart(2, '0')}:${segundos.toString().padStart(2, '0')}`;
+    }
+
+    iniciarTimerVisual(recompensaId, dataInicio, tempoMinutos) {
+        // Limpar timer anterior se existir
+        if (this.activeTimers[recompensaId]) {
+            clearInterval(this.activeTimers[recompensaId]);
+        }
+        
+        // Atualizar a cada segundo
+        this.activeTimers[recompensaId] = setInterval(() => {
+            const elemento = document.getElementById(`timer-${recompensaId}`);
+            if (elemento) {
+                const tempoRestante = this.calcularTempoRestante(dataInicio, tempoMinutos);
+                elemento.textContent = tempoRestante;
+                
+                // Verificar se acabou
+                if (tempoRestante === '00:00') {
+                    this.finalizarRecompensaTempo(recompensaId);
+                }
+            }
+        }, 1000);
+    }
+
+    async iniciarRecompensaTempo(recompensaId) {
+        if (!this.currentUser) {
+            this.showModal('Atenção', 'Selecione um usuário primeiro!');
+            return;
+        }
+
+        this.showLoading(true);
+        try {
+            const recompensa = await this.db.get('recompensas', recompensaId);
+
+            if (this.currentUser.pontos_totais < recompensa.custo_pontos) {
+                this.showModal('Pontos Insuficientes', 
+                    `Você precisa de ${recompensa.custo_pontos} pontos. Você tem ${this.currentUser.pontos_totais}.`);
+                return;
+            }
+
+            // Registrar compra no histórico
+            await this.db.add('historico_compras', {
+                data: new Date().toISOString(),
+                usuario_id: this.currentUser.id,
+                recompensa_id: recompensaId,
+                pontos_gastos: recompensa.custo_pontos
+            });
+
+            // Criar registro de recompensa ativa
+            await this.db.add('recompensas_ativas', {
+                usuario_id: this.currentUser.id,
+                recompensa_id: recompensaId,
+                data_inicio: new Date().toISOString(),
+                data_fim: null,
+                concluida: false
+            });
+
+            // Atualizar pontos do usuário
+            this.currentUser.pontos_totais -= recompensa.custo_pontos;
+            await this.db.update('usuarios', this.currentUser);
+
+            this.updatePointsDisplay();
+            await this.loadHistorico();
+            await this.loadRecompensas();
+            await this.loadUsuarios();
+
+            this.showModal('Recompensa Iniciada! ️', 
+                `"${recompensa.nome}" iniciada! Tempo: ${recompensa.tempo_minutos} minutos.`);
+        } catch (error) {
+            console.error('Erro ao iniciar recompensa:', error);
+            this.showModal('Erro', 'Não foi possível iniciar a recompensa.');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    async finalizarRecompensaTempo(recompensaId) {
+        if (!this.currentUser) return;
+        
+        try {
+            // Parar timer
+            if (this.activeTimers[recompensaId]) {
+                clearInterval(this.activeTimers[recompensaId]);
+                delete this.activeTimers[recompensaId];
+            }
+            
+            // Marcar como concluída no banco
+            const recompensasAtivas = await this.db.query('recompensas_ativas', { 
+                usuario_id: this.currentUser.id, 
+                recompensa_id: recompensaId,
+                concluida: false 
+            });
+            
+            if (recompensasAtivas.length > 0) {
+                await this.db.update('recompensas_ativas', {
+                    id: recompensasAtivas[0].id,
+                    concluida: true,
+                    data_fim: new Date().toISOString()
+                });
+            }
+            
+            // Recarregar recompensas
+            await this.loadRecompensas();
+            
+            this.showModal('Tempo Esgotado! ✅', 'Sua recompensa foi concluída!');
+        } catch (error) {
+            console.error('Erro ao finalizar recompensa:', error);
+        }
     }
 
     async comprarRecompensa(recompensaId) {
@@ -381,6 +564,69 @@ class LojaDePontos {
         } catch (error) {
             console.error('Erro ao comprar recompensa:', error);
             this.showModal('Erro', 'Não foi possível completar a compra.');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    // ============================================================
+    // ZERAR PONTOS E HISTÓRICO
+    // ============================================================
+    async zerarPontos(usuarioId) {
+        if (!confirm('Tem certeza que deseja zerar os pontos deste usuário?')) return;
+        
+        this.showLoading(true);
+        try {
+            await this.db.update('usuarios', {
+                id: usuarioId,
+                pontos_totais: 0
+            });
+            
+            await this.loadUsuarios();
+            if (this.currentUser && this.currentUser.id === usuarioId) {
+                this.currentUser.pontos_totais = 0;
+                this.updatePointsDisplay();
+            }
+            
+            this.showModal('Pontos Zerados! 🔄', 'Os pontos do usuário foram resetados para 0.');
+        } catch (error) {
+            console.error('Erro:', error);
+            this.showModal('Erro', 'Não foi possível zerar os pontos.');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    async zerarHistorico(usuarioId) {
+        if (!confirm('ATENÇÃO: Isso apagará TODO o histórico de ações e compras deste usuário. Deseja continuar?')) return;
+        
+        this.showLoading(true);
+        try {
+            // Deletar histórico de ações
+            const historicoAcoes = await this.db.query('historico_acoes', { usuario_id: usuarioId });
+            for (const ha of historicoAcoes) {
+                await this.db.delete('historico_acoes', ha.id);
+            }
+            
+            // Deletar histórico de compras
+            const historicoCompras = await this.db.query('historico_compras', { usuario_id: usuarioId });
+            for (const hc of historicoCompras) {
+                await this.db.delete('historico_compras', hc.id);
+            }
+            
+            // Deletar recompensas ativas
+            const recompensasAtivas = await this.db.query('recompensas_ativas', { usuario_id: usuarioId });
+            for (const ra of recompensasAtivas) {
+                await this.db.delete('recompensas_ativas', ra.id);
+            }
+            
+            await this.loadHistorico();
+            await this.loadRecompensas();
+            
+            this.showModal('Histórico Zerado! ️', 'Todo o histórico foi apagado.');
+        } catch (error) {
+            console.error('Erro:', error);
+            this.showModal('Erro', 'Não foi possível zerar o histórico.');
         } finally {
             this.showLoading(false);
         }
@@ -501,6 +747,7 @@ class LojaDePontos {
             e.preventDefault();
             const nome = document.getElementById('recompensaNome').value.trim();
             const custo = parseInt(document.getElementById('recompensaCusto').value);
+            const tempo = parseInt(document.getElementById('recompensaTempo').value) || 0;
             const imagem = document.getElementById('recompensaImagem').value.trim();
             
             if (nome && custo) {
@@ -509,6 +756,7 @@ class LojaDePontos {
                     await this.db.add('recompensas', {
                         nome: nome,
                         custo_pontos: custo,
+                        tempo_minutos: tempo,
                         imagem_url: imagem || null
                     });
                     
