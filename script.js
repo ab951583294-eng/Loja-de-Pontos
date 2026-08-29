@@ -103,6 +103,7 @@ class LojaDePontos {
         this.calendarioDataAtual = new Date();
         this.historicoDiasMap = {};
         this.dataMetasSelecionada = null;
+        this._metaTemplates = []; // CORREÇÃO: inicializa vazio
         this.init();
     }
 
@@ -183,7 +184,7 @@ class LojaDePontos {
             <h3>🔒 Bloquear Sistema</h3>
             <p>Ao bloquear, você não poderá mais editar recompensas, ações, usuários ou metas. Apenas operações de uso continuarão disponíveis.</p>
             <div class="lock-warning">
-                ️ <strong>Guarde este código!</strong> Ele será necessário para desbloquear. O código muda a cada bloqueio.
+                ⚠️ <strong>Guarde este código!</strong> Ele será necessário para desbloquear. O código muda a cada bloqueio.
             </div>
             <div class="lock-code-display">${newCode}</div>
             <div class="lock-actions">
@@ -446,7 +447,6 @@ class LojaDePontos {
             <option value="${ontem}">Ontem (${this.formatarData(ontem)})</option>
         `;
         
-        // Selecionar ontem se existir dia pendente, senão hoje
         if (this.diaPendente) {
             select.value = ontem;
             this.dataMetasSelecionada = ontem;
@@ -459,7 +459,6 @@ class LojaDePontos {
     async selecionarDataMetas(dataStr) {
         if (!dataStr) return;
         
-        // Validar se a data é hoje ou ontem
         const hoje = this.getDataHoje();
         const ontem = this.getDataOntem();
         
@@ -935,8 +934,11 @@ class LojaDePontos {
     // METAS DO DIA + STREAK + XP
     // ============================================================
     async loadMetasTemplates() {
-        const metas = await this.db.getAll('metas');
+        const metas = await this.db.query('metas', { ativa: true });
         const adminMetasList = document.getElementById('adminMetasList');
+        
+        // CORREÇÃO: Salvar em this._metaTemplates para uso em outras funções
+        this._metaTemplates = metas;
         
         adminMetasList.innerHTML = '';
         if (metas.length === 0) {
@@ -1174,7 +1176,6 @@ class LojaDePontos {
 
         const dataAlvo = dataEspecifica || this.dataMetasSelecionada || this.getDataHoje();
         
-        // Validar data
         const hoje = this.getDataHoje();
         const ontem = this.getDataOntem();
         if (dataAlvo !== hoje && dataAlvo !== ontem) {
@@ -1202,6 +1203,7 @@ class LojaDePontos {
             
             if (metasDoDia.length === 0) {
                 const templates = await this.db.query('metas', { ativa: true });
+                this._metaTemplates = templates; // CORREÇÃO: atualiza templates
                 
                 for (const template of templates) {
                     await this.db.add('metas_do_dia', {
@@ -1254,8 +1256,9 @@ class LojaDePontos {
         if (total === 0) {
             html += `<p class="empty-state">Nenhuma meta cadastrada. Adicione metas em Administração.</p>`;
         } else {
+            // CORREÇÃO: usa this._metaTemplates que agora está populado
             metas.forEach(meta => {
-                const metaTemplate = this._metaTemplates?.find(t => t.id === meta.meta_id);
+                const metaTemplate = this._metaTemplates.find(t => t.id === meta.meta_id);
                 const descricao = metaTemplate ? metaTemplate.descricao : 'Meta removida';
                 
                 html += `
@@ -1263,6 +1266,9 @@ class LojaDePontos {
                         <div class="meta-checkbox">${meta.concluida ? '✓' : ''}</div>
                         <div class="meta-descricao">${descricao}</div>
                         <div class="meta-pontos">+${valorPorMeta}%</div>
+                        <div class="meta-actions">
+                            <button class="btn-icon" onclick="event.stopPropagation(); app.excluirMetaDoDia(${meta.id}, ${meta.meta_id})" title="Excluir esta meta">✕</button>
+                        </div>
                     </div>
                 `;
             });
@@ -1297,6 +1303,27 @@ class LojaDePontos {
             await this.carregarMetasDoDia(meta.data);
         } catch (error) {
             this.showModal('Erro', 'Não foi possível atualizar a meta.');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    // NOVA FUNÇÃO: Excluir meta diretamente do painel de metas
+    async excluirMetaDoDia(metaDoDiaId, metaTemplateId) {
+        if (!confirm('Remover esta meta do dia?\n\nA meta será removida apenas deste dia. Para excluir permanentemente, vá em Administração.')) return;
+        
+        this.showLoading(true);
+        try {
+            // Remove a meta do dia atual
+            await this.db.delete('metas_do_dia', metaDoDiaId);
+            
+            // Recarrega
+            await this.carregarMetasDoDia(this.dataMetasSelecionada);
+            
+            this.showModal('Meta removida', 'A meta foi removida deste dia.');
+        } catch (error) {
+            console.error('Erro:', error);
+            this.showModal('Erro', 'Não foi possível remover a meta.');
         } finally {
             this.showLoading(false);
         }
@@ -1450,7 +1477,7 @@ class LojaDePontos {
         if (recompensaAleatoria) {
             html += `
                 <div class="dia-resultado-bonus">
-                    <h4>🎁 Dia perfeito! Recompensa aleatória:</h4>
+                    <h4> Dia perfeito! Recompensa aleatória:</h4>
                     <p>${recompensaAleatoria.nome}</p>
                 </div>
             `;
@@ -1658,9 +1685,9 @@ class LojaDePontos {
             return;
         }
         
-        const mensagem = `📊 Dia ${this.formatarData(dataStr)}\n\n` +
+        const mensagem = ` Dia ${this.formatarData(dataStr)}\n\n` +
             `✅ Metas: ${diaInfo.metas_concluidas}/${diaInfo.metas_total}\n` +
-            ` Conclusão: ${diaInfo.percentual_conclusao}%\n` +
+            `📈 Conclusão: ${diaInfo.percentual_conclusao}%\n` +
             `⭐ XP Ganho: ${diaInfo.xp_ganho}\n` +
             `🔥 Streak: ${diaInfo.streak_atual}\n` +
             `${diaInfo.recompensa_bonus_nome ? `🎁 Bônus: ${diaInfo.recompensa_bonus_nome}\n` : ''}`;
@@ -1923,12 +1950,12 @@ class LojaDePontos {
             this.showModal('Sistema Bloqueado', 'Desbloqueie o sistema para excluir.');
             return;
         }
-        if (!confirm('Excluir esta meta? Ela não aparecerá mais nos próximos dias.')) return;
+        if (!confirm('Excluir esta meta permanentemente? Ela não aparecerá mais nos próximos dias.')) return;
         this.showLoading(true);
         try {
             await this.db.update('metas', { id, ativa: false });
             await this.loadMetasTemplates();
-            this.showModal('Excluída', 'A meta foi desativada.');
+            this.showModal('Excluída', 'A meta foi desativada permanentemente.');
         } catch (error) {
             this.showModal('Erro', 'Não foi possível excluir.');
         } finally {
