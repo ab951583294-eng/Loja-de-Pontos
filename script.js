@@ -6,6 +6,13 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// Configurações do sistema de metas
+const CONFIG_METAS = {
+    PERCENTUAL_MINIMO_STREAK: 50, // % mínimo de metas para manter/aumentar streak
+    MARCO_STREAK_BONUS: 15, // A cada X dias de streak, ganha recompensa bônus
+    PERCENTUAL_RECOMPENSA_ALEATORIA: 100 // % para ganhar recompensa aleatória
+};
+
 // ============================================================
 // CLASSE DATABASE
 // ============================================================
@@ -68,6 +75,16 @@ class Database {
         if (error) throw error;
         return data || [];
     }
+
+    async upsert(table, data, conflictColumns) {
+        const { data: result, error } = await supabaseClient
+            .from(table)
+            .upsert(data, { onConflict: conflictColumns.join(',') })
+            .select()
+            .single();
+        if (error) throw error;
+        return result;
+    }
 }
 
 // ============================================================
@@ -80,6 +97,10 @@ class LojaDePontos {
         this.activeTimers = {};
         this.isLocked = false;
         this.lockCode = null;
+        this.metasDoDia = [];
+        this.diaEncerrado = false;
+        this.diaPendente = null;
+        this.streakAtual = 0;
         this.init();
     }
 
@@ -91,7 +112,8 @@ class LojaDePontos {
             await Promise.all([
                 this.loadUsuarios(),
                 this.loadAcoes(),
-                this.loadRecompensas()
+                this.loadRecompensas(),
+                this.loadMetasTemplates()
             ]);
             this.setupAdminForms();
             this.applyLockUI();
@@ -147,13 +169,11 @@ class LojaDePontos {
     showLockFlow() {
         const modal = document.getElementById('lockModal');
         const body = document.getElementById('lockModalBody');
-        
-        // Gerar novo código aleatório de 32 caracteres
         const newCode = this.generateRandomCode(32);
         
         body.innerHTML = `
-            <h3> Bloquear Sistema</h3>
-            <p>Ao bloquear, você não poderá mais editar recompensas, ações ou usuários. Apenas operações de uso (registrar ações, comprar, zerar pontos/histórico) continuarão disponíveis.</p>
+            <h3>🔒 Bloquear Sistema</h3>
+            <p>Ao bloquear, você não poderá mais editar recompensas, ações, usuários ou metas. Apenas operações de uso continuarão disponíveis.</p>
             <div class="lock-warning">
                 ⚠️ <strong>Guarde este código!</strong> Ele será necessário para desbloquear. O código muda a cada bloqueio.
             </div>
@@ -164,9 +184,7 @@ class LojaDePontos {
             </div>
         `;
         
-        // Guardar o código temporariamente
         this._pendingLockCode = newCode;
-        
         modal.classList.add('active');
     }
 
@@ -200,7 +218,6 @@ class LojaDePontos {
         
         modal.classList.add('active');
         
-        // Aplicar proteções anti-copiar/colar no input
         setTimeout(() => {
             this.setupAntiCopyPaste();
             const input = document.getElementById('unlockCodeInput');
@@ -212,53 +229,13 @@ class LojaDePontos {
         const input = document.getElementById('unlockCodeInput');
         if (!input) return;
         
-        // Bloquear colar
-        input.addEventListener('paste', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            return false;
-        });
+        input.addEventListener('paste', (e) => { e.preventDefault(); e.stopPropagation(); return false; });
+        input.addEventListener('copy', (e) => { e.preventDefault(); e.stopPropagation(); return false; });
+        input.addEventListener('cut', (e) => { e.preventDefault(); e.stopPropagation(); return false; });
+        input.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); return false; });
+        input.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); return false; });
+        input.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); return false; });
         
-        // Bloquear copiar
-        input.addEventListener('copy', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            return false;
-        });
-        
-        // Bloquear cortar
-        input.addEventListener('cut', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            return false;
-        });
-        
-        // Bloquear arrastar e soltar
-        input.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            return false;
-        });
-        
-        input.addEventListener('drop', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            return false;
-        });
-        
-        // Bloquear menu de contexto (botão direito no PC, long-press no celular)
-        input.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            return false;
-        });
-        
-        // Bloquear seleção (impede copiar via seleção)
-        input.addEventListener('selectstart', (e) => {
-            // Permitir seleção para digitar, mas não para copiar
-        });
-        
-        // Bloquear eventos globais de copiar/colar quando o modal está aberto
         document.addEventListener('paste', this._globalPasteHandler);
         document.addEventListener('copy', this._globalCopyHandler);
     }
@@ -271,7 +248,6 @@ class LojaDePontos {
     confirmUnlock() {
         const input = document.getElementById('unlockCodeInput');
         if (!input) return;
-        
         const code = input.value.trim();
         
         if (!code) {
@@ -280,7 +256,6 @@ class LojaDePontos {
         }
         
         if (code === this.lockCode) {
-            // Código correto - gerar novo código para o próximo bloqueio
             this.isLocked = false;
             this.lockCode = null;
             localStorage.removeItem('lojaDePontos_lock');
@@ -310,30 +285,14 @@ class LojaDePontos {
             lockBtn.textContent = '🔒';
             lockBtn.classList.add('is-locked');
             if (adminBanner) adminBanner.style.display = 'block';
-            
-            // Desabilitar formulários de administração
-            adminForms.forEach(form => {
-                form.style.display = 'none';
-            });
-            
-            // Esconder botões de excluir
-            deleteButtons.forEach(btn => {
-                btn.style.display = 'none';
-            });
+            adminForms.forEach(form => { form.style.display = 'none'; });
+            deleteButtons.forEach(btn => { btn.style.display = 'none'; });
         } else {
             lockBtn.textContent = '🔓';
             lockBtn.classList.remove('is-locked');
             if (adminBanner) adminBanner.style.display = 'none';
-            
-            // Reabilitar formulários
-            adminForms.forEach(form => {
-                form.style.display = 'flex';
-            });
-            
-            // Mostrar botões de excluir
-            deleteButtons.forEach(btn => {
-                btn.style.display = 'inline-block';
-            });
+            adminForms.forEach(form => { form.style.display = 'flex'; });
+            deleteButtons.forEach(btn => { btn.style.display = 'inline-block'; });
         }
     }
 
@@ -371,6 +330,9 @@ class LojaDePontos {
         
         if (tab === 'compras' && this.currentUser) {
             this.loadComprasAtivas();
+        }
+        if (tab === 'metas' && this.currentUser) {
+            this.carregarMetasDoDia();
         }
     }
 
@@ -431,6 +393,8 @@ class LojaDePontos {
             document.getElementById('totalPoints').textContent = '0';
             document.getElementById('historicoAcoes').innerHTML = '<p class="empty-state">Selecione um usuário</p>';
             document.getElementById('comprasAtivasList').innerHTML = '<p class="empty-state">Selecione um usuário</p>';
+            document.getElementById('metasDiaContent').innerHTML = '<p class="empty-state">Selecione um usuário para ver as metas</p>';
+            document.getElementById('diaPendenteBanner').style.display = 'none';
             return;
         }
         this.currentUser = await this.db.get('usuarios', parseInt(userId));
@@ -438,6 +402,14 @@ class LojaDePontos {
         await this.loadHistorico();
         await this.loadRecompensas();
         await this.loadComprasAtivas();
+        await this.carregarStreak();
+        await this.verificarDiaPendente();
+        
+        // Se estiver na aba de metas, recarrega
+        const metasTab = document.querySelector('.main-tabs [data-tab="metas"]');
+        if (metasTab && metasTab.classList.contains('active')) {
+            this.carregarMetasDoDia();
+        }
     }
 
     updatePointsDisplay() {
@@ -800,7 +772,6 @@ class LojaDePontos {
                 pausada: false,
                 data_inicio: new Date().toISOString()
             });
-            
             await this.loadComprasAtivas();
         } catch (error) {
             this.showModal('Erro', 'Não foi possível iniciar.');
@@ -817,7 +788,6 @@ class LojaDePontos {
                 pausada: true,
                 data_inicio: null
             });
-            
             await this.loadComprasAtivas();
         } catch (error) {
             this.showModal('Erro', 'Não foi possível pausar.');
@@ -832,13 +802,11 @@ class LojaDePontos {
                 clearInterval(this.activeTimers[compraId]);
                 delete this.activeTimers[compraId];
             }
-            
             await this.db.update('recompensas_ativas', {
                 id: compraId,
                 concluida: true,
                 data_fim: new Date().toISOString()
             });
-            
             await this.loadComprasAtivas();
             this.showModal('Tempo esgotado', 'O tempo da recompensa acabou!');
         } catch (error) {
@@ -848,20 +816,17 @@ class LojaDePontos {
 
     async interromperCompra(compraId) {
         if (!confirm('Interromper esta compra? O tempo será cancelado.')) return;
-        
         this.showLoading(true);
         try {
             if (this.activeTimers[compraId]) {
                 clearInterval(this.activeTimers[compraId]);
                 delete this.activeTimers[compraId];
             }
-            
             await this.db.update('recompensas_ativas', {
                 id: compraId,
                 concluida: true,
                 data_fim: new Date().toISOString()
             });
-            
             await this.loadComprasAtivas();
             this.showModal('Interrompido', 'A compra foi interrompida.');
         } catch (error) {
@@ -873,7 +838,6 @@ class LojaDePontos {
 
     async usarTicket(compraId) {
         if (!confirm('Confirmar uso deste ticket?')) return;
-        
         this.showLoading(true);
         try {
             await this.db.update('recompensas_ativas', {
@@ -881,7 +845,6 @@ class LojaDePontos {
                 concluida: true,
                 data_fim: new Date().toISOString()
             });
-            
             await this.loadComprasAtivas();
             this.showModal('Ticket usado', 'O ticket foi confirmado como utilizado.');
         } catch (error) {
@@ -893,20 +856,17 @@ class LojaDePontos {
 
     async cancelarTicket(compraId) {
         if (!confirm('Cancelar este ticket? Os pontos NÃO serão devolvidos.')) return;
-        
         this.showLoading(true);
         try {
             if (this.activeTimers[compraId]) {
                 clearInterval(this.activeTimers[compraId]);
                 delete this.activeTimers[compraId];
             }
-            
             await this.db.update('recompensas_ativas', {
                 id: compraId,
                 concluida: true,
                 data_fim: new Date().toISOString()
             });
-            
             await this.loadComprasAtivas();
             this.showModal('Cancelado', 'O ticket foi cancelado.');
         } catch (error) {
@@ -917,7 +877,517 @@ class LojaDePontos {
     }
 
     // ============================================================
-    // ZERAR (permitido mesmo bloqueado)
+    // METAS DO DIA
+    // ============================================================
+    async loadMetasTemplates() {
+        const metas = await this.db.getAll('metas');
+        const adminMetasList = document.getElementById('adminMetasList');
+        
+        adminMetasList.innerHTML = '';
+        if (metas.length === 0) {
+            adminMetasList.innerHTML = '<p class="empty-state">Nenhuma meta cadastrada</p>';
+            return;
+        }
+
+        metas.forEach(meta => {
+            const item = document.createElement('div');
+            item.className = 'list-item';
+            item.innerHTML = `
+                <div class="list-item-info">
+                    <div class="list-item-name">${meta.descricao}</div>
+                    <div class="list-item-points">+${meta.pontos} pontos</div>
+                </div>
+                <button class="btn btn-danger" onclick="app.deleteMeta(${meta.id})">Excluir</button>
+            `;
+            adminMetasList.appendChild(item);
+        });
+    }
+
+    async carregarStreak() {
+        if (!this.currentUser) {
+            this.streakAtual = 0;
+            this.atualizarStreakDisplay();
+            return;
+        }
+
+        try {
+            // Pega o último dia encerrado do usuário
+            const historico = await this.db.query('historico_dias', { usuario_id: this.currentUser.id });
+            
+            if (historico.length === 0) {
+                this.streakAtual = 0;
+            } else {
+                // Ordena por data decrescente
+                historico.sort((a, b) => new Date(b.data) - new Date(a.data));
+                const ultimoDia = historico[0];
+                this.streakAtual = ultimoDia.streak_atual || 0;
+            }
+            
+            this.atualizarStreakDisplay();
+        } catch (error) {
+            console.error('Erro ao carregar streak:', error);
+            this.streakAtual = 0;
+            this.atualizarStreakDisplay();
+        }
+    }
+
+    atualizarStreakDisplay() {
+        document.getElementById('streakCount').textContent = this.streakAtual;
+        
+        const proximoMarco = CONFIG_METAS.MARCO_STREAK_BONUS;
+        const diasParaProximo = proximoMarco - (this.streakAtual % proximoMarco);
+        const diasParaMostrar = diasParaProximo === proximoMarco ? proximoMarco : diasParaProximo;
+        
+        document.getElementById('streakNext').textContent = `Próximo marco: ${diasParaMostrar} dia${diasParaMostrar > 1 ? 's' : ''}`;
+    }
+
+    async verificarDiaPendente() {
+        if (!this.currentUser) return;
+        
+        try {
+            const hoje = this.getDataHoje();
+            const ontem = this.getDataOntem();
+            
+            // Verifica se hoje já foi encerrado
+            const historicoHoje = await this.db.query('historico_dias', { 
+                usuario_id: this.currentUser.id, 
+                data: hoje 
+            });
+            
+            if (historicoHoje.length > 0) {
+                // Hoje já foi encerrado
+                this.diaEncerrado = true;
+                this.diaPendente = null;
+                document.getElementById('diaPendenteBanner').style.display = 'none';
+                return;
+            }
+            
+            // Verifica se ontem foi encerrado
+            const historicoOntem = await this.db.query('historico_dias', { 
+                usuario_id: this.currentUser.id, 
+                data: ontem 
+            });
+            
+            if (historicoOntem.length === 0) {
+                // Ontem não foi encerrado - dia pendente
+                this.diaPendente = ontem;
+                document.getElementById('diaPendenteBanner').style.display = 'block';
+            } else {
+                this.diaPendente = null;
+                document.getElementById('diaPendenteBanner').style.display = 'none';
+            }
+            
+            this.diaEncerrado = false;
+        } catch (error) {
+            console.error('Erro ao verificar dia pendente:', error);
+        }
+    }
+
+    async pularDiaPendente() {
+        if (!confirm('Pular o dia pendente? Seu streak será resetado para 0.')) return;
+        
+        this.showLoading(true);
+        try {
+            // Registra o dia pendente com 0 metas (streak reseta)
+            await this.db.add('historico_dias', {
+                usuario_id: this.currentUser.id,
+                data: this.diaPendente,
+                metas_concluidas: 0,
+                metas_total: 0,
+                pontos_ganhos: 0,
+                streak_atual: 0
+            });
+            
+            this.streakAtual = 0;
+            this.atualizarStreakDisplay();
+            this.diaPendente = null;
+            document.getElementById('diaPendenteBanner').style.display = 'none';
+            
+            this.showModal('Dia pulado', 'O dia foi pulado e o streak foi resetado.');
+        } catch (error) {
+            this.showModal('Erro', 'Não foi possível pular o dia.');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    irParaDiaPendente() {
+        // Mostra as metas do dia pendente para o usuário encerrar
+        this.carregarMetasDoDia(this.diaPendente);
+    }
+
+    getDataHoje() {
+        const hoje = new Date();
+        return hoje.toISOString().split('T')[0];
+    }
+
+    getDataOntem() {
+        const ontem = new Date();
+        ontem.setDate(ontem.getDate() - 1);
+        return ontem.toISOString().split('T')[0];
+    }
+
+    async carregarMetasDoDia(dataEspecifica = null) {
+        if (!this.currentUser) {
+            document.getElementById('metasDiaContent').innerHTML = '<p class="empty-state">Selecione um usuário</p>';
+            return;
+        }
+
+        this.showLoading(true);
+        try {
+            const dataAlvo = dataEspecifica || this.getDataHoje();
+            const ehDiaPendente = dataEspecifica !== null;
+            
+            // Verifica se o dia já foi encerrado
+            const historico = await this.db.query('historico_dias', { 
+                usuario_id: this.currentUser.id, 
+                data: dataAlvo 
+            });
+            
+            if (historico.length > 0) {
+                // Dia já encerrado - mostra resultado
+                this.mostrarResultadoDia(historico[0]);
+                this.showLoading(false);
+                return;
+            }
+            
+            // Carrega ou cria metas do dia
+            let metasDoDia = await this.db.query('metas_do_dia', { 
+                usuario_id: this.currentUser.id, 
+                data: dataAlvo 
+            });
+            
+            // Se não há metas do dia, cria baseado nos templates ativos
+            if (metasDoDia.length === 0) {
+                const templates = await this.db.query('metas', { ativa: true });
+                
+                for (const template of templates) {
+                    await this.db.add('metas_do_dia', {
+                        usuario_id: this.currentUser.id,
+                        meta_id: template.id,
+                        data: dataAlvo,
+                        concluida: false
+                    });
+                }
+                
+                metasDoDia = await this.db.query('metas_do_dia', { 
+                    usuario_id: this.currentUser.id, 
+                    data: dataAlvo 
+                });
+            }
+            
+            this.metasDoDia = metasDoDia;
+            this.mostrarMetasDoDia(metasDoDia, dataAlvo, ehDiaPendente);
+        } catch (error) {
+            console.error('Erro:', error);
+            document.getElementById('metasDiaContent').innerHTML = '<p class="empty-state">Erro ao carregar metas</p>';
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    mostrarMetasDoDia(metas, data, ehDiaPendente) {
+        const container = document.getElementById('metasDiaContent');
+        const concluidas = metas.filter(m => m.concluida).length;
+        const total = metas.length;
+        const percentual = total > 0 ? Math.round((concluidas / total) * 100) : 0;
+        
+        const dataFormatada = this.formatarData(data);
+        const titulo = ehDiaPendente ? `Metas do dia ${dataFormatada} (pendente)` : `Metas de hoje`;
+        
+        let html = `
+            <div class="section">
+                <div class="metas-header">
+                    <h2>${titulo}</h2>
+                    <div class="metas-progress">${concluidas}/${total} metas (${percentual}%)</div>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar" style="width: ${percentual}%"></div>
+                </div>
+        `;
+        
+        if (total === 0) {
+            html += `<p class="empty-state">Nenhuma meta cadastrada. Adicione metas em Administração.</p>`;
+        } else {
+            metas.forEach(meta => {
+                const metaTemplate = this._metaTemplates?.find(t => t.id === meta.meta_id);
+                const descricao = metaTemplate ? metaTemplate.descricao : 'Meta removida';
+                const pontos = metaTemplate ? metaTemplate.pontos : 0;
+                
+                html += `
+                    <div class="meta-item ${meta.concluida ? 'concluida' : ''}" onclick="app.toggleMeta(${meta.id})">
+                        <div class="meta-checkbox">${meta.concluida ? '✓' : ''}</div>
+                        <div class="meta-descricao">${descricao}</div>
+                        <div class="meta-pontos">+${pontos} pts</div>
+                    </div>
+                `;
+            });
+            
+            html += `
+                <button class="btn btn-primary encerrar-dia-btn" onclick="app.encerrarDia('${data}')" ${ehDiaPendente ? '' : ''}>
+                    ${ehDiaPendente ? 'Encerrar dia pendente' : 'Encerrar dia'}
+                </button>
+            `;
+        }
+        
+        html += `</div>`;
+        
+        // Histórico recente de dias
+        html += this.getHistoricoDiasHTML();
+        
+        container.innerHTML = html;
+    }
+
+    async toggleMeta(metaId) {
+        this.showLoading(true);
+        try {
+            const meta = this.metasDoDia.find(m => m.id === metaId);
+            if (!meta) return;
+            
+            meta.concluida = !meta.concluida;
+            await this.db.update('metas_do_dia', {
+                id: metaId,
+                concluida: meta.concluida
+            });
+            
+            // Recarrega para atualizar UI
+            await this.carregarMetasDoDia(meta.data);
+        } catch (error) {
+            this.showModal('Erro', 'Não foi possível atualizar a meta.');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    async encerrarDia(data) {
+        if (!confirm('Encerrar o dia? Esta ação não pode ser desfeita.')) return;
+        
+        this.showLoading(true);
+        try {
+            const metas = await this.db.query('metas_do_dia', { 
+                usuario_id: this.currentUser.id, 
+                data: data 
+            });
+            
+            const concluidas = metas.filter(m => m.concluida).length;
+            const total = metas.length;
+            const percentual = total > 0 ? (concluidas / total) * 100 : 0;
+            
+            // Calcula pontos das metas concluídas
+            const templates = await this.db.getAll('metas');
+            let pontosGanhos = 0;
+            metas.forEach(m => {
+                if (m.concluida) {
+                    const template = templates.find(t => t.id === m.meta_id);
+                    if (template) pontosGanhos += template.pontos;
+                }
+            });
+            
+            // Calcula novo streak
+            let novoStreak = this.streakAtual;
+            if (percentual >= CONFIG_METAS.PERCENTUAL_MINIMO_STREAK) {
+                novoStreak = this.streakAtual + 1;
+            } else {
+                novoStreak = 0;
+            }
+            
+            // Verifica bônus de marco de streak
+            let recompensaBonusId = null;
+            let recompensaBonusNome = null;
+            let mensagemBonus = null;
+            
+            if (novoStreak > 0 && novoStreak % CONFIG_METAS.MARCO_STREAK_BONUS === 0) {
+                // Sorteia recompensa aleatória (sem tempo)
+                const recompensasDisponiveis = await this.db.query('recompensas', { tempo_minutos: 0 });
+                if (recompensasDisponiveis.length > 0) {
+                    const sorteada = recompensasDisponiveis[Math.floor(Math.random() * recompensasDisponiveis.length)];
+                    recompensaBonusId = sorteada.id;
+                    recompensaBonusNome = sorteada.nome;
+                    mensagemBonus = `🏆 Marco de ${CONFIG_METAS.MARCO_STREAK_BONUS} dias! Recompensa: ${sorteada.nome}`;
+                    
+                    // Cria ticket da recompensa bônus
+                    await this.db.add('recompensas_ativas', {
+                        usuario_id: this.currentUser.id,
+                        recompensa_id: sorteada.id,
+                        data_inicio: null,
+                        data_fim: null,
+                        tempo_restante_segundos: 0,
+                        pausada: true,
+                        concluida: false
+                    });
+                }
+            }
+            
+            // Recompensa aleatória por 100% de conclusão
+            let recompensaAleatoria = null;
+            if (percentual >= CONFIG_METAS.PERCENTUAL_RECOMPENSA_ALEATORIA && total > 0) {
+                const recompensasDisponiveis = await this.db.query('recompensas', { tempo_minutos: 0 });
+                if (recompensasDisponiveis.length > 0) {
+                    const sorteada = recompensasDisponiveis[Math.floor(Math.random() * recompensasDisponiveis.length)];
+                    recompensaAleatoria = sorteada;
+                    
+                    await this.db.add('recompensas_ativas', {
+                        usuario_id: this.currentUser.id,
+                        recompensa_id: sorteada.id,
+                        data_inicio: null,
+                        data_fim: null,
+                        tempo_restante_segundos: 0,
+                        pausada: true,
+                        concluida: false
+                    });
+                }
+            }
+            
+            // Salva no histórico
+            await this.db.add('historico_dias', {
+                usuario_id: this.currentUser.id,
+                data: data,
+                metas_concluidas: concluidas,
+                metas_total: total,
+                pontos_ganhos: pontosGanhos,
+                streak_atual: novoStreak,
+                recompensa_bonus_id: recompensaBonusId,
+                recompensa_bonus_nome: recompensaBonusNome
+            });
+            
+            // Adiciona pontos ao usuário
+            if (pontosGanhos > 0) {
+                this.currentUser.pontos_totais += pontosGanhos;
+                await this.db.update('usuarios', this.currentUser);
+                this.updatePointsDisplay();
+                await this.loadUsuarios();
+            }
+            
+            this.streakAtual = novoStreak;
+            this.atualizarStreakDisplay();
+            this.diaPendente = null;
+            document.getElementById('diaPendenteBanner').style.display = 'none';
+            
+            // Mostra resultado
+            this.mostrarResultadoDia({
+                data: data,
+                metas_concluidas: concluidas,
+                metas_total: total,
+                pontos_ganhos: pontosGanhos,
+                streak_atual: novoStreak,
+                recompensa_bonus_nome: recompensaBonusNome
+            }, recompensaAleatoria, mensagemBonus);
+            
+            await this.loadComprasAtivas();
+            
+        } catch (error) {
+            console.error('Erro:', error);
+            this.showModal('Erro', 'Não foi possível encerrar o dia.');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    mostrarResultadoDia(resultado, recompensaAleatoria = null, mensagemBonus = null) {
+        const container = document.getElementById('metasDiaContent');
+        const percentual = resultado.metas_total > 0 
+            ? Math.round((resultado.metas_concluidas / resultado.metas_total) * 100) 
+            : 0;
+        
+        const dataFormatada = this.formatarData(resultado.data);
+        
+        let html = `
+            <div class="dia-resultado">
+                <h3>📊 Dia ${dataFormatada} encerrado</h3>
+                <div class="dia-resultado-stats">
+                    <div class="stat-box">
+                        <div class="stat-value">${resultado.metas_concluidas}/${resultado.metas_total}</div>
+                        <div class="stat-label">Metas</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value">${percentual}%</div>
+                        <div class="stat-label">Concluído</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value">+${resultado.pontos_ganhos}</div>
+                        <div class="stat-label">Pontos</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value">🔥 ${resultado.streak_atual}</div>
+                        <div class="stat-label">Streak</div>
+                    </div>
+                </div>
+        `;
+        
+        if (recompensaAleatoria) {
+            html += `
+                <div class="dia-resultado-bonus">
+                    <h4>🎁 Dia perfeito! Recompensa aleatória:</h4>
+                    <p>${recompensaAleatoria.nome}</p>
+                </div>
+            `;
+        }
+        
+        if (mensagemBonus) {
+            html += `
+                <div class="dia-resultado-bonus">
+                    <h4>${mensagemBonus}</h4>
+                </div>
+            `;
+        }
+        
+        html += `</div>`;
+        html += this.getHistoricoDiasHTML();
+        
+        container.innerHTML = html;
+    }
+
+    getHistoricoDiasHTML() {
+        // Será preenchido após carregar o histórico
+        return `<div id="historicoDiasContainer" class="historico-dias-list"></div>`;
+    }
+
+    async carregarHistoricoDias() {
+        if (!this.currentUser) return;
+        
+        try {
+            const historico = await this.db.query('historico_dias', { usuario_id: this.currentUser.id });
+            historico.sort((a, b) => new Date(b.data) - new Date(a.data));
+            const recentes = historico.slice(0, 7);
+            
+            const container = document.getElementById('historicoDiasContainer');
+            if (!container) return;
+            
+            if (recentes.length === 0) {
+                container.innerHTML = '<p class="empty-state">Nenhum dia encerrado ainda</p>';
+                return;
+            }
+            
+            let html = '<h3 style="margin-bottom: 12px; font-size: 0.95rem;">Últimos 7 dias</h3>';
+            recentes.forEach(dia => {
+                const dataFormatada = this.formatarData(dia.data);
+                const percentual = dia.metas_total > 0 
+                    ? Math.round((dia.metas_concluidas / dia.metas_total) * 100) 
+                    : 0;
+                
+                html += `
+                    <div class="historico-dias-item">
+                        <div class="historico-dias-data">${dataFormatada}</div>
+                        <div class="historico-dias-info">
+                            ${dia.metas_concluidas}/${dia.metas_total} metas • +${dia.pontos_ganhos} pts • 🔥 ${dia.streak_atual}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        } catch (error) {
+            console.error('Erro ao carregar histórico de dias:', error);
+        }
+    }
+
+    formatarData(dataStr) {
+        const [ano, mes, dia] = dataStr.split('-');
+        return `${dia}/${mes}`;
+    }
+
+    // ============================================================
+    // ZERAR
     // ============================================================
     async zerarPontos(usuarioId) {
         if (!confirm('Zerar os pontos?')) return;
@@ -938,7 +1408,7 @@ class LojaDePontos {
     }
 
     async zerarHistorico(usuarioId) {
-        if (!confirm('Apagar TODO o histórico?')) return;
+        if (!confirm('Apagar TODO o histórico? Isso inclui ações, compras, tickets E metas/streaks.')) return;
         this.showLoading(true);
         try {
             const ha = await this.db.query('historico_acoes', { usuario_id: usuarioId });
@@ -947,9 +1417,16 @@ class LojaDePontos {
             for (const h of hc) await this.db.delete('historico_compras', h.id);
             const ra = await this.db.query('recompensas_ativas', { usuario_id: usuarioId });
             for (const r of ra) await this.db.delete('recompensas_ativas', r.id);
+            const hd = await this.db.query('historico_dias', { usuario_id: usuarioId });
+            for (const h of hd) await this.db.delete('historico_dias', h.id);
+            const md = await this.db.query('metas_do_dia', { usuario_id: usuarioId });
+            for (const m of md) await this.db.delete('metas_do_dia', m.id);
+            
             await this.loadHistorico();
             await this.loadComprasAtivas();
-            this.showModal('Zerado', 'Histórico apagado.');
+            await this.carregarStreak();
+            
+            this.showModal('Zerado', 'Histórico completo apagado.');
         } catch (error) {
             this.showModal('Erro', 'Não foi possível zerar.');
         } finally {
@@ -962,7 +1439,6 @@ class LojaDePontos {
     // ============================================================
     async loadHistorico() {
         if (!this.currentUser) return;
-        
         this.showLoading(true);
         try {
             const historicoAcoes = await this.db.getAll('historico_acoes');
@@ -1000,7 +1476,7 @@ class LojaDePontos {
     }
 
     // ============================================================
-    // FORMULÁRIOS (bloqueados quando isLocked)
+    // FORMULÁRIOS
     // ============================================================
     setupAdminForms() {
         document.getElementById('formUsuario').addEventListener('submit', async (e) => {
@@ -1009,7 +1485,6 @@ class LojaDePontos {
                 this.showModal('Sistema Bloqueado', 'Desbloqueie o sistema para adicionar usuários.');
                 return;
             }
-            
             const nome = document.getElementById('usuarioNome').value.trim();
             if (nome) {
                 this.showLoading(true);
@@ -1032,7 +1507,6 @@ class LojaDePontos {
                 this.showModal('Sistema Bloqueado', 'Desbloqueie o sistema para adicionar recompensas.');
                 return;
             }
-            
             const nome = document.getElementById('recompensaNome').value.trim();
             const custo = parseInt(document.getElementById('recompensaCusto').value);
             const tempo = parseInt(document.getElementById('recompensaTempo').value) || 0;
@@ -1061,7 +1535,6 @@ class LojaDePontos {
                 this.showModal('Sistema Bloqueado', 'Desbloqueie o sistema para adicionar ações.');
                 return;
             }
-            
             const descricao = document.getElementById('acaoDescricao').value.trim();
             const valor = parseInt(document.getElementById('acaoValor').value);
             if (descricao && !isNaN(valor)) {
@@ -1078,17 +1551,40 @@ class LojaDePontos {
                 }
             }
         });
+
+        document.getElementById('formMeta').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (this.isLocked) {
+                this.showModal('Sistema Bloqueado', 'Desbloqueie o sistema para adicionar metas.');
+                return;
+            }
+            const descricao = document.getElementById('metaDescricao').value.trim();
+            const pontos = parseInt(document.getElementById('metaPontos').value);
+            if (descricao && !isNaN(pontos)) {
+                this.showLoading(true);
+                try {
+                    await this.db.add('metas', { descricao, pontos, ativa: true });
+                    document.getElementById('formMeta').reset();
+                    document.getElementById('metaPontos').value = '5';
+                    await this.loadMetasTemplates();
+                    this.showModal('Adicionada', `Meta "${descricao}" criada.`);
+                } catch (error) {
+                    this.showModal('Erro', 'Não foi possível adicionar.');
+                } finally {
+                    this.showLoading(false);
+                }
+            }
+        });
     }
 
     // ============================================================
-    // EXCLUSÃO (bloqueada quando isLocked)
+    // EXCLUSÃO
     // ============================================================
     async deleteUsuario(id) {
         if (this.isLocked) {
             this.showModal('Sistema Bloqueado', 'Desbloqueie o sistema para excluir.');
             return;
         }
-        
         if (!confirm('Excluir usuário? Tudo será apagado.')) return;
         this.showLoading(true);
         try {
@@ -1111,7 +1607,6 @@ class LojaDePontos {
             this.showModal('Sistema Bloqueado', 'Desbloqueie o sistema para excluir.');
             return;
         }
-        
         if (!confirm('Excluir ação?')) return;
         this.showLoading(true);
         try {
@@ -1129,12 +1624,29 @@ class LojaDePontos {
             this.showModal('Sistema Bloqueado', 'Desbloqueie o sistema para excluir.');
             return;
         }
-        
         if (!confirm('Excluir recompensa?')) return;
         this.showLoading(true);
         try {
             await this.db.delete('recompensas', id);
             await this.loadRecompensas();
+        } catch (error) {
+            this.showModal('Erro', 'Não foi possível excluir.');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    async deleteMeta(id) {
+        if (this.isLocked) {
+            this.showModal('Sistema Bloqueado', 'Desbloqueie o sistema para excluir.');
+            return;
+        }
+        if (!confirm('Excluir esta meta? Ela não aparecerá mais nos próximos dias.')) return;
+        this.showLoading(true);
+        try {
+            await this.db.update('metas', { id, ativa: false });
+            await this.loadMetasTemplates();
+            this.showModal('Excluída', 'A meta foi desativada.');
         } catch (error) {
             this.showModal('Erro', 'Não foi possível excluir.');
         } finally {
@@ -1156,7 +1668,7 @@ class LojaDePontos {
     }
 }
 
-// Handlers globais para bloquear copiar/colar em toda a página quando o modal de desbloqueio está aberto
+// Handlers globais para bloquear copiar/colar
 LojaDePontos.prototype._globalPasteHandler = function(e) {
     const lockModal = document.getElementById('lockModal');
     if (lockModal && lockModal.classList.contains('active')) {
