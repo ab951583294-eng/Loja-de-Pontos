@@ -1,14 +1,16 @@
 :root {
-    --primary-color: #4A90E2;
-    --secondary-color: #50C878;
-    --accent-color: #FFD700;
-    --danger-color: #E74C3C;
-    --text-color: #2C3E50;
-    --bg-color: #F5F7FA;
-    --card-bg: #FFFFFF;
-    --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    --shadow-hover: 0 8px 16px rgba(0, 0, 0, 0.15);
-    --border-radius: 12px;
+    --bg: #f5f5f5;
+    --card: #ffffff;
+    --border: #e0e0e0;
+    --text: #222222;
+    --text-muted: #777777;
+    --primary: #333333;
+    --primary-hover: #000000;
+    --danger: #666666;
+    --danger-hover: #333333;
+    --success: #555555;
+    --radius: 8px;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 * {
@@ -18,59 +20,62 @@
 }
 
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: var(--text-color);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
     min-height: 100vh;
+    line-height: 1.5;
 }
 
 .container {
-    max-width: 1200px;
+    max-width: 1100px;
     margin: 0 auto;
     padding: 20px;
 }
 
 header {
-    background: var(--card-bg);
-    box-shadow: var(--shadow);
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
     position: sticky;
     top: 0;
     z-index: 100;
 }
 
 header h1 {
-    color: var(--primary-color);
-    font-size: 2rem;
-    margin-bottom: 15px;
+    font-size: 1.4rem;
+    font-weight: 600;
+    padding: 15px 0 10px;
     text-align: center;
-    padding-top: 15px;
+    color: var(--text);
+    letter-spacing: -0.5px;
 }
 
 nav {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     justify-content: center;
-    margin-bottom: 10px;
+    padding-bottom: 12px;
 }
 
 .nav-btn {
-    padding: 10px 25px;
-    border: none;
-    background: transparent;
-    color: var(--text-color);
-    font-size: 1rem;
+    padding: 8px 20px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    font-size: 0.9rem;
     cursor: pointer;
-    border-radius: var(--border-radius);
-    transition: all 0.3s ease;
+    border-radius: var(--radius);
+    transition: all 0.2s ease;
 }
 
 .nav-btn:hover {
-    background: var(--bg-color);
+    background: var(--bg);
 }
 
 .nav-btn.active {
-    background: var(--primary-color);
+    background: var(--primary);
     color: white;
+    border-color: var(--primary);
 }
 
 .page {
@@ -79,113 +84,85 @@ nav {
 
 .page.active {
     display: block;
-    animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
 }
 
 .user-selector {
-    background: var(--card-bg);
-    padding: 20px;
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow);
+    background: var(--card);
+    padding: 16px 20px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
     margin-bottom: 20px;
-    text-align: center;
     display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    justify-content: center;
+    gap: 12px;
     align-items: center;
+    justify-content: center;
 }
 
 .user-selector label {
-    font-weight: bold;
-    font-size: 1.1rem;
+    font-weight: 500;
+    font-size: 0.95rem;
 }
 
 .user-selector select {
-    padding: 10px 20px;
-    border: 2px solid var(--primary-color);
-    border-radius: var(--border-radius);
-    font-size: 1rem;
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.95rem;
+    background: var(--card);
+    color: var(--text);
     cursor: pointer;
-    min-width: 200px;
+    min-width: 220px;
+}
+
+.user-selector select:focus {
+    outline: none;
+    border-color: var(--primary);
 }
 
 .points-display {
-    margin-bottom: 30px;
+    margin-bottom: 24px;
 }
 
 .points-box {
-    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-    color: white;
-    padding: 30px;
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow);
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 24px;
+    border-radius: var(--radius);
     text-align: center;
     position: relative;
-    overflow: hidden;
-}
-
-.points-box::before {
-    content: '';
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
-    animation: pulse 3s infinite;
-}
-
-@keyframes pulse {
-    0%, 100% { transform: scale(1); opacity: 0.5; }
-    50% { transform: scale(1.1); opacity: 0.8; }
 }
 
 .points-label {
     display: block;
-    font-size: 1.2rem;
-    margin-bottom: 10px;
-    position: relative;
-    z-index: 1;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
 }
 
 .points-value {
     display: block;
-    font-size: 4rem;
-    font-weight: bold;
-    position: relative;
-    z-index: 1;
-    animation: countUp 0.5s ease;
-}
-
-@keyframes countUp {
-    from { transform: scale(0.8); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
+    font-size: 3rem;
+    font-weight: 300;
+    color: var(--text);
+    letter-spacing: -1px;
 }
 
 .points-icon {
     position: absolute;
-    top: 20px;
+    top: 16px;
     right: 20px;
-    font-size: 3rem;
-    animation: rotate 4s linear infinite;
-}
-
-@keyframes rotate {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-transform: lowercase;
 }
 
 .dashboard-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 20px;
-    margin-bottom: 30px;
+    margin-bottom: 20px;
 }
 
 @media (max-width: 768px) {
@@ -194,55 +171,49 @@ nav {
     }
     
     .points-value {
-        font-size: 3rem;
-    }
-    
-    header h1 {
-        font-size: 1.5rem;
+        font-size: 2.5rem;
     }
 }
 
 .section {
-    background: var(--card-bg);
-    padding: 25px;
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow);
+    background: var(--card);
+    padding: 20px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
     margin-bottom: 20px;
 }
 
 .section h2 {
-    color: var(--primary-color);
-    margin-bottom: 20px;
-    font-size: 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .list-container {
-    margin-bottom: 15px;
-    min-height: 50px;
+    margin-bottom: 12px;
+    min-height: 40px;
 }
 
 .empty-state {
     text-align: center;
-    color: #999;
+    color: var(--text-muted);
     padding: 20px;
-    font-style: italic;
+    font-size: 0.9rem;
 }
 
 .list-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 15px;
-    background: var(--bg-color);
-    border-radius: var(--border-radius);
-    margin-bottom: 10px;
-    transition: all 0.3s ease;
+    padding: 12px 14px;
+    background: var(--bg);
+    border-radius: var(--radius);
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
     gap: 10px;
-}
-
-.list-item:hover {
-    transform: translateX(5px);
-    box-shadow: var(--shadow);
 }
 
 .list-item-info {
@@ -250,185 +221,187 @@ nav {
 }
 
 .list-item-name {
-    font-weight: bold;
-    margin-bottom: 5px;
+    font-weight: 500;
+    font-size: 0.95rem;
+    margin-bottom: 2px;
 }
 
 .list-item-points {
-    color: var(--secondary-color);
-    font-size: 0.9rem;
-    font-weight: bold;
+    color: var(--text-muted);
+    font-size: 0.85rem;
 }
 
 .list-item-points.negative {
-    color: var(--danger-color);
+    color: var(--danger);
 }
 
 .cards-container {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 15px;
+    gap: 12px;
 }
 
 .reward-card {
-    background: var(--bg-color);
-    border-radius: var(--border-radius);
-    padding: 20px;
+    background: var(--bg);
+    border-radius: var(--radius);
+    padding: 16px;
     text-align: center;
-    transition: all 0.3s ease;
-    border: 2px solid transparent;
+    border: 1px solid var(--border);
+    transition: all 0.2s ease;
 }
 
 .reward-card:hover {
-    transform: translateY(-5px);
-    box-shadow: var(--shadow-hover);
-    border-color: var(--accent-color);
+    border-color: var(--primary);
 }
 
 .reward-card img {
     width: 100%;
-    height: 120px;
+    height: 100px;
     object-fit: cover;
-    border-radius: var(--border-radius);
+    border-radius: var(--radius);
     margin-bottom: 10px;
+    filter: grayscale(100%);
 }
 
 .reward-card h3 {
-    color: var(--text-color);
-    margin-bottom: 10px;
-    font-size: 1.1rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+    margin-bottom: 8px;
 }
 
 .reward-cost {
-    color: var(--accent-color);
-    font-weight: bold;
-    font-size: 1.2rem;
-    margin-bottom: 15px;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 12px;
 }
 
 .timer-display {
-    font-size: 1.5rem;
-    font-weight: bold;
-    color: var(--primary-color);
+    font-size: 1.3rem;
+    font-weight: 300;
+    color: var(--text);
     margin-bottom: 10px;
     font-family: 'Courier New', monospace;
-    background: var(--card-bg);
-    padding: 10px;
-    border-radius: var(--border-radius);
-    border: 2px solid var(--primary-color);
+    padding: 8px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--card);
 }
 
 .btn {
-    padding: 12px 25px;
+    padding: 8px 16px;
     border: none;
-    border-radius: var(--border-radius);
-    font-size: 1rem;
+    border-radius: var(--radius);
+    font-size: 0.9rem;
     cursor: pointer;
-    transition: all 0.3s ease;
-    font-weight: bold;
+    transition: all 0.2s ease;
+    font-weight: 500;
 }
 
 .btn-primary {
-    background: var(--primary-color);
+    background: var(--primary);
     color: white;
     width: 100%;
 }
 
 .btn-primary:hover {
-    background: #357ABD;
-    transform: translateY(-2px);
-    box-shadow: var(--shadow);
+    background: var(--primary-hover);
 }
 
 .btn-secondary {
-    background: #95a5a6;
-    color: white;
-    padding: 8px 15px;
-    font-size: 0.9rem;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    font-size: 0.85rem;
 }
 
 .btn-secondary:hover {
-    background: #7f8c8d;
+    background: var(--border);
 }
 
 .btn-register {
-    background: var(--secondary-color);
+    background: var(--primary);
     color: white;
-    padding: 8px 15px;
-    font-size: 0.9rem;
+    padding: 6px 12px;
+    font-size: 0.85rem;
 }
 
 .btn-register:hover {
-    background: #3D9B5F;
+    background: var(--primary-hover);
 }
 
 .btn-danger {
-    background: var(--danger-color);
+    background: var(--danger);
     color: white;
-    padding: 8px 15px;
-    font-size: 0.9rem;
+    padding: 6px 12px;
+    font-size: 0.85rem;
 }
 
 .btn-danger:hover {
-    background: #C0392B;
+    background: var(--danger-hover);
 }
 
 .btn-buy {
-    background: var(--accent-color);
-    color: var(--text-color);
+    background: var(--primary);
+    color: white;
     width: 100%;
 }
 
 .btn-buy:hover:not(:disabled) {
-    background: #FFC700;
-    transform: scale(1.05);
+    background: var(--primary-hover);
 }
 
 .btn-buy:disabled {
-    background: #ccc;
+    background: var(--border);
+    color: var(--text-muted);
     cursor: not-allowed;
-    transform: none;
 }
 
 .form {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    margin-bottom: 20px;
+    gap: 8px;
+    margin-bottom: 16px;
 }
 
 .form input {
-    padding: 12px;
-    border: 2px solid #ddd;
-    border-radius: var(--border-radius);
-    font-size: 1rem;
-    transition: border-color 0.3s ease;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    background: var(--card);
+    color: var(--text);
 }
 
 .form input:focus {
     outline: none;
-    border-color: var(--primary-color);
+    border-color: var(--primary);
+}
+
+.form input::placeholder {
+    color: var(--text-muted);
 }
 
 .history-tabs {
     display: flex;
-    gap: 10px;
-    margin-bottom: 20px;
+    gap: 8px;
+    margin-bottom: 16px;
 }
 
 .tab-btn {
-    padding: 10px 20px;
-    border: none;
-    background: var(--bg-color);
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    background: var(--card);
     cursor: pointer;
-    border-radius: var(--border-radius);
-    transition: all 0.3s ease;
-    font-weight: bold;
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    color: var(--text);
 }
 
 .tab-btn.active {
-    background: var(--primary-color);
+    background: var(--primary);
     color: white;
+    border-color: var(--primary);
 }
 
 .history-content {
@@ -440,35 +413,37 @@ nav {
 }
 
 .history-item {
-    padding: 15px;
-    background: var(--bg-color);
-    border-radius: var(--border-radius);
-    margin-bottom: 10px;
+    padding: 12px 14px;
+    background: var(--bg);
+    border-radius: var(--radius);
+    margin-bottom: 8px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 10px;
+    border: 1px solid var(--border);
 }
 
 .history-date {
-    color: #666;
-    font-size: 0.9rem;
+    color: var(--text-muted);
+    font-size: 0.8rem;
 }
 
 .history-points {
-    font-weight: bold;
-    padding: 5px 15px;
-    border-radius: 20px;
+    font-weight: 500;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.85rem;
     white-space: nowrap;
 }
 
 .history-points.positive {
-    background: var(--secondary-color);
+    background: var(--text);
     color: white;
 }
 
 .history-points.negative {
-    background: var(--danger-color);
+    background: var(--danger);
     color: white;
 }
 
@@ -479,9 +454,8 @@ nav {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.4);
     z-index: 1000;
-    animation: fadeIn 0.3s ease;
 }
 
 .modal.active {
@@ -491,50 +465,46 @@ nav {
 }
 
 .modal-content {
-    background: var(--card-bg);
-    padding: 30px;
-    border-radius: var(--border-radius);
+    background: var(--card);
+    padding: 24px;
+    border-radius: var(--radius);
     max-width: 400px;
     width: 90%;
     position: relative;
-    animation: slideUp 0.3s ease;
-}
-
-@keyframes slideUp {
-    from { transform: translateY(50px); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
+    border: 1px solid var(--border);
 }
 
 .modal-close {
     position: absolute;
-    top: 15px;
-    right: 20px;
-    font-size: 2rem;
+    top: 12px;
+    right: 16px;
+    font-size: 1.5rem;
     cursor: pointer;
-    color: #999;
+    color: var(--text-muted);
 }
 
 .modal-close:hover {
-    color: var(--text-color);
+    color: var(--text);
 }
 
 .modal-content h3 {
-    color: var(--primary-color);
-    margin-bottom: 15px;
+    font-size: 1.1rem;
+    margin-bottom: 12px;
+    font-weight: 600;
 }
 
 .modal-content p {
     margin-bottom: 20px;
-    line-height: 1.6;
+    color: var(--text-muted);
+    font-size: 0.95rem;
 }
 
 .admin-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 20px;
 }
 
-/* Loading Overlay */
 .loading-overlay {
     display: none;
     position: fixed;
@@ -547,7 +517,7 @@ nav {
     justify-content: center;
     align-items: center;
     flex-direction: column;
-    gap: 15px;
+    gap: 12px;
 }
 
 .loading-overlay.active {
@@ -555,12 +525,12 @@ nav {
 }
 
 .spinner {
-    width: 50px;
-    height: 50px;
-    border: 5px solid #f3f3f3;
-    border-top: 5px solid var(--primary-color);
+    width: 32px;
+    height: 32px;
+    border: 2px solid var(--border);
+    border-top: 2px solid var(--primary);
     border-radius: 50%;
-    animation: spin 1s linear infinite;
+    animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
@@ -569,7 +539,6 @@ nav {
 }
 
 .loading-overlay p {
-    color: var(--primary-color);
-    font-weight: bold;
-    font-size: 1.1rem;
+    color: var(--text-muted);
+    font-size: 0.9rem;
 }
