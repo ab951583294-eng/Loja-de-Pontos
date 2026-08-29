@@ -36,33 +36,51 @@
                 </div>
             </div>
 
-            <div class="dashboard-grid">
+            <div class="history-tabs main-tabs">
+                <button class="tab-btn active" data-tab="acoes">Ações</button>
+                <button class="tab-btn" data-tab="recompensas">Recompensas</button>
+                <button class="tab-btn" data-tab="compras">Minhas Compras</button>
+            </div>
+
+            <!-- AÇÕES -->
+            <div id="tab-acoes" class="tab-content active">
                 <div class="section">
-                    <h2>Ações</h2>
+                    <h2>Ações Disponíveis</h2>
                     <div id="acoesList" class="list-container">
                         <p class="empty-state">Carregando...</p>
                     </div>
                 </div>
-
                 <div class="section">
-                    <h2>Recompensas</h2>
-                    <div id="recompensasList" class="cards-container">
-                        <p class="empty-state">Carregando...</p>
+                    <h2>Histórico de Ações</h2>
+                    <div id="historicoAcoes" class="history-content">
+                        <p class="empty-state">Selecione um usuário</p>
                     </div>
                 </div>
             </div>
 
-            <div class="section">
-                <h2>Histórico</h2>
-                <div class="history-tabs">
-                    <button class="tab-btn active" data-tab="acoes">Ações</button>
-                    <button class="tab-btn" data-tab="compras">Compras</button>
+            <!-- RECOMPENSAS -->
+            <div id="tab-recompensas" class="tab-content">
+                <div class="section">
+                    <h2>Loja de Recompensas</h2>
+                    <div id="recompensasList" class="cards-container">
+                        <p class="empty-state">Carregando...</p>
+                    </div>
                 </div>
-                <div id="historicoAcoes" class="history-content active">
-                    <p class="empty-state">Selecione um usuário</p>
+                <div class="section">
+                    <h2>Histórico de Compras</h2>
+                    <div id="historicoCompras" class="history-content">
+                        <p class="empty-state">Selecione um usuário</p>
+                    </div>
                 </div>
-                <div id="historicoCompras" class="history-content">
-                    <p class="empty-state">Selecione um usuário</p>
+            </div>
+
+            <!-- MINHAS COMPRAS (TIMERS) -->
+            <div id="tab-compras" class="tab-content">
+                <div class="section">
+                    <h2>Compras Ativas</h2>
+                    <div id="comprasAtivasList" class="cards-container">
+                        <p class="empty-state">Nenhuma compra ativa</p>
+                    </div>
                 </div>
             </div>
         </section>
