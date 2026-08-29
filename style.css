@@ -810,6 +810,47 @@ nav {
     color: var(--text-muted);
 }
 
+/* SELETOR DE DATA */
+.data-selector {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.data-selector label {
+    font-weight: 500;
+    font-size: 0.95rem;
+}
+
+.data-selector select {
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.95rem;
+    background: var(--card);
+    color: var(--text);
+    cursor: pointer;
+    min-width: 180px;
+}
+
+.data-selector select:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.data-selector-info {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
 /* METAS DO DIA */
 .dia-pendente-banner {
     background: var(--bg);
@@ -1213,5 +1254,14 @@ nav {
     
     .calendario-header h2 {
         font-size: 1rem;
+    }
+    
+    .data-selector {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .data-selector select {
+        width: 100%;
     }
 }
