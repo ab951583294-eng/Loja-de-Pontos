@@ -104,12 +104,10 @@ class LojaDePontos {
         document.getElementById('btnAdmin').addEventListener('click', () => this.switchPage('admin'));
         document.getElementById('selectUser').addEventListener('change', (e) => this.selectUser(e.target.value));
         
-        // Tabs principais (Ações | Recompensas | Compras)
         document.querySelectorAll('.main-tabs .tab-btn').forEach(btn => {
             btn.addEventListener('click', (e) => this.switchMainTab(e.target.dataset.tab));
         });
         
-        // Tabs de histórico
         document.querySelectorAll('.history-tabs .tab-btn').forEach(btn => {
             btn.addEventListener('click', (e) => this.switchHistoryTab(e.target.dataset.tab));
         });
@@ -165,6 +163,9 @@ class LojaDePontos {
         const select = document.getElementById('selectUser');
         const usuariosList = document.getElementById('usuariosList');
         
+        // Salvar seleção atual
+        const selectedUserId = this.currentUser ? this.currentUser.id : select.value;
+        
         select.innerHTML = '<option value="">-- Selecione --</option>';
         usuarios.forEach(usuario => {
             const option = document.createElement('option');
@@ -172,6 +173,11 @@ class LojaDePontos {
             option.textContent = `${usuario.nome} (${usuario.pontos_totais} pts)`;
             select.appendChild(option);
         });
+        
+        // Restaurar seleção
+        if (selectedUserId) {
+            select.value = selectedUserId;
+        }
 
         usuariosList.innerHTML = '';
         if (usuarios.length === 0) {
@@ -202,6 +208,7 @@ class LojaDePontos {
             document.getElementById('totalPoints').textContent = '0';
             document.getElementById('historicoAcoes').innerHTML = '<p class="empty-state">Selecione um usuário</p>';
             document.getElementById('historicoCompras').innerHTML = '<p class="empty-state">Selecione um usuário</p>';
+            document.getElementById('comprasAtivasList').innerHTML = '<p class="empty-state">Selecione um usuário</p>';
             return;
         }
         this.currentUser = await this.db.get('usuarios', parseInt(userId));
@@ -308,7 +315,6 @@ class LojaDePontos {
         }
 
         recompensas.forEach(recompensa => {
-            // Cards da loja
             const card = document.createElement('div');
             card.className = 'reward-card';
             
@@ -333,7 +339,7 @@ class LojaDePontos {
                 } else {
                     buttonHTML = `
                         <div class="reward-cost">${recompensa.custo_pontos} pts</div>
-                        <button class="btn btn-buy" onclick="app.comprarRecompensa(${recompensa.id})" ${disabled}>
+                        <button class="btn btn-buy" onclick="app.comprarRecompensaTicket(${recompensa.id})" ${disabled}>
                             ${canBuy ? 'Comprar' : 'Pontos insuficientes'}
                         </button>
                     `;
@@ -348,7 +354,6 @@ class LojaDePontos {
             card.innerHTML = `${imagemHTML}<h3>${recompensa.nome}</h3>${buttonHTML}`;
             recompensasList.appendChild(card);
 
-            // Lista da administração
             const adminItem = document.createElement('div');
             adminItem.className = 'list-item';
             adminItem.innerHTML = `
@@ -362,40 +367,7 @@ class LojaDePontos {
         });
     }
 
-    // Comprar recompensa SEM tempo (imediata)
-    async comprarRecompensa(recompensaId) {
-        if (!this.currentUser) {
-            this.showModal('Atenção', 'Selecione um usuário.');
-            return;
-        }
-        this.showLoading(true);
-        try {
-            const recompensa = await this.db.get('recompensas', recompensaId);
-            if (this.currentUser.pontos_totais < recompensa.custo_pontos) {
-                this.showModal('Pontos insuficientes', `Precisa de ${recompensa.custo_pontos} pts.`);
-                return;
-            }
-            await this.db.add('historico_compras', {
-                data: new Date().toISOString(),
-                usuario_id: this.currentUser.id,
-                recompensa_id: recompensaId,
-                pontos_gastos: recompensa.custo_pontos
-            });
-            this.currentUser.pontos_totais -= recompensa.custo_pontos;
-            await this.db.update('usuarios', this.currentUser);
-            this.updatePointsDisplay();
-            await this.loadHistorico();
-            await this.loadRecompensas();
-            await this.loadUsuarios();
-            this.showModal('Comprada', `${recompensa.nome} por ${recompensa.custo_pontos} pts`);
-        } catch (error) {
-            this.showModal('Erro', 'Não foi possível completar.');
-        } finally {
-            this.showLoading(false);
-        }
-    }
-
-    // Comprar recompensa COM tempo (vai para "Minhas Compras")
+    // Comprar recompensa de tempo (vai para Minhas Compras)
     async comprarRecompensaTempo(recompensaId) {
         if (!this.currentUser) {
             this.showModal('Atenção', 'Selecione um usuário.');
@@ -409,7 +381,6 @@ class LojaDePontos {
                 return;
             }
             
-            // Registrar compra
             await this.db.add('historico_compras', {
                 data: new Date().toISOString(),
                 usuario_id: this.currentUser.id,
@@ -417,18 +388,16 @@ class LojaDePontos {
                 pontos_gastos: recompensa.custo_pontos
             });
             
-            // Criar registro de compra ativa (pausada inicialmente)
             await this.db.add('recompensas_ativas', {
                 usuario_id: this.currentUser.id,
                 recompensa_id: recompensaId,
                 data_inicio: null,
                 data_fim: null,
-                tempo_restante_segundos: recompensa.tempo_minutos * 60, // CORREÇÃO: minutos * 60 = segundos
+                tempo_restante_segundos: recompensa.tempo_minutos * 60,
                 pausada: true,
                 concluida: false
             });
             
-            // Deduzir pontos
             this.currentUser.pontos_totais -= recompensa.custo_pontos;
             await this.db.update('usuarios', this.currentUser);
             
@@ -438,7 +407,56 @@ class LojaDePontos {
             await this.loadUsuarios();
             await this.loadComprasAtivas();
             
-            this.showModal('Comprada', `${recompensa.nome} adquirida! Vá em "Minhas Compras" para iniciar.`);
+            this.showModal('Ticket adquirido', `${recompensa.nome} - Vá em "Minhas Compras" para iniciar.`);
+        } catch (error) {
+            console.error('Erro:', error);
+            this.showModal('Erro', 'Não foi possível comprar.');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    // Comprar recompensa sem tempo (ticket para usar depois)
+    async comprarRecompensaTicket(recompensaId) {
+        if (!this.currentUser) {
+            this.showModal('Atenção', 'Selecione um usuário.');
+            return;
+        }
+        this.showLoading(true);
+        try {
+            const recompensa = await this.db.get('recompensas', recompensaId);
+            if (this.currentUser.pontos_totais < recompensa.custo_pontos) {
+                this.showModal('Pontos insuficientes', `Precisa de ${recompensa.custo_pontos} pts.`);
+                return;
+            }
+            
+            await this.db.add('historico_compras', {
+                data: new Date().toISOString(),
+                usuario_id: this.currentUser.id,
+                recompensa_id: recompensaId,
+                pontos_gastos: recompensa.custo_pontos
+            });
+            
+            await this.db.add('recompensas_ativas', {
+                usuario_id: this.currentUser.id,
+                recompensa_id: recompensaId,
+                data_inicio: null,
+                data_fim: null,
+                tempo_restante_segundos: 0,
+                pausada: true,
+                concluida: false
+            });
+            
+            this.currentUser.pontos_totais -= recompensa.custo_pontos;
+            await this.db.update('usuarios', this.currentUser);
+            
+            this.updatePointsDisplay();
+            await this.loadHistorico();
+            await this.loadRecompensas();
+            await this.loadUsuarios();
+            await this.loadComprasAtivas();
+            
+            this.showModal('Ticket adquirido', `${recompensa.nome} - Vá em "Minhas Compras" para usar.`);
         } catch (error) {
             console.error('Erro:', error);
             this.showModal('Erro', 'Não foi possível comprar.');
@@ -448,7 +466,7 @@ class LojaDePontos {
     }
 
     // ============================================================
-    // COMPRAS ATIVAS (TIMERS)
+    // COMPRAS ATIVAS (TICKETS)
     // ============================================================
     async loadComprasAtivas() {
         if (!this.currentUser) {
@@ -467,7 +485,7 @@ class LojaDePontos {
             lista.innerHTML = '';
             
             if (compras.length === 0) {
-                lista.innerHTML = '<p class="empty-state" style="grid-column: 1/-1;">Nenhuma compra ativa</p>';
+                lista.innerHTML = '<p class="empty-state" style="grid-column: 1/-1;">Nenhum ticket ativo</p>';
                 return;
             }
             
@@ -480,29 +498,44 @@ class LojaDePontos {
                 const card = document.createElement('div');
                 card.className = 'reward-card';
                 
-                const tempoFormatado = this.formatarTempo(compra.tempo_restante_segundos);
-                const status = compra.pausada ? 'Pausado' : 'Em andamento';
-                const statusClass = compra.pausada ? 'timer-status' : 'timer-status';
+                const temTempo = recompensa.tempo_minutos > 0;
                 
-                card.innerHTML = `
-                    <h3>${recompensa.nome}</h3>
-                    <div class="timer-display" id="timer-${compra.id}">${tempoFormatado}</div>
-                    <div class="${statusClass}">${status}</div>
-                    <div class="timer-controls">
-                        ${compra.pausada 
-                            ? `<button class="btn btn-start" onclick="app.iniciarTimer(${compra.id})">Iniciar</button>`
-                            : `<button class="btn btn-pause" onclick="app.pausarTimer(${compra.id})">Pausar</button>`
-                        }
-                        <button class="btn btn-interrupt" onclick="app.interromperCompra(${compra.id})">Interromper</button>
-                    </div>
-                    <button class="btn btn-revoke" onclick="app.revogarCompra(${compra.id}, ${recompensa.custo_pontos})">Revogar (+${recompensa.custo_pontos} pts)</button>
-                `;
-                
-                lista.appendChild(card);
-                
-                // Se estiver rodando, iniciar timer visual
-                if (!compra.pausada) {
-                    this.iniciarTimerVisual(compra.id, compra.tempo_restante_segundos);
+                if (temTempo) {
+                    // Recompensa de tempo - mostrar timer
+                    const tempoFormatado = this.formatarTempo(compra.tempo_restante_segundos);
+                    const status = compra.pausada ? 'Pausado' : 'Em andamento';
+                    
+                    card.innerHTML = `
+                        <h3>${recompensa.nome}</h3>
+                        <div class="timer-display" id="timer-${compra.id}">${tempoFormatado}</div>
+                        <div class="timer-status">${status}</div>
+                        <div class="timer-controls">
+                            ${compra.pausada 
+                                ? `<button class="btn btn-start" onclick="app.iniciarTimer(${compra.id})">Iniciar</button>`
+                                : `<button class="btn btn-pause" onclick="app.pausarTimer(${compra.id})">Pausar</button>`
+                            }
+                            <button class="btn btn-interrupt" onclick="app.interromperCompra(${compra.id})">Interromper</button>
+                        </div>
+                        <button class="btn btn-revoke" onclick="app.cancelarTicket(${compra.id})">Cancelar</button>
+                    `;
+                    
+                    lista.appendChild(card);
+                    
+                    if (!compra.pausada) {
+                        this.iniciarTimerVisual(compra.id, compra.tempo_restante_segundos);
+                    }
+                } else {
+                    // Recompensa sem tempo - ticket para usar
+                    card.innerHTML = `
+                        <h3>${recompensa.nome}</h3>
+                        <div class="timer-status">Ticket disponível</div>
+                        <div class="timer-controls">
+                            <button class="btn btn-start" onclick="app.usarTicket(${compra.id})">Usar Ticket</button>
+                        </div>
+                        <button class="btn btn-revoke" onclick="app.cancelarTicket(${compra.id})">Cancelar</button>
+                    `;
+                    
+                    lista.appendChild(card);
                 }
             }
         } catch (error) {
@@ -521,7 +554,6 @@ class LojaDePontos {
     }
 
     iniciarTimerVisual(compraId, segundosRestantes) {
-        // Limpar timer anterior se existir
         if (this.activeTimers[compraId]) {
             clearInterval(this.activeTimers[compraId]);
         }
@@ -545,8 +577,6 @@ class LojaDePontos {
     async iniciarTimer(compraId) {
         this.showLoading(true);
         try {
-            const compra = await this.db.get('recompensas_ativas', compraId);
-            
             await this.db.update('recompensas_ativas', {
                 id: compraId,
                 pausada: false,
@@ -564,10 +594,6 @@ class LojaDePontos {
     async pausarTimer(compraId) {
         this.showLoading(true);
         try {
-            const compra = await this.db.get('recompensas_ativas', compraId);
-            
-            // Calcular tempo restante baseado no tempo que passou
-            // Como não temos data_inicio precisa, usamos o tempo_restante_segundos
             await this.db.update('recompensas_ativas', {
                 id: compraId,
                 pausada: true,
@@ -627,8 +653,30 @@ class LojaDePontos {
         }
     }
 
-    async revogarCompra(compraId, custoPontos) {
-        if (!confirm(`Revogar esta compra? ${custoPontos} pontos serão devolvidos.`)) return;
+    // Usar ticket (recompensa sem tempo)
+    async usarTicket(compraId) {
+        if (!confirm('Confirmar uso deste ticket?')) return;
+        
+        this.showLoading(true);
+        try {
+            await this.db.update('recompensas_ativas', {
+                id: compraId,
+                concluida: true,
+                data_fim: new Date().toISOString()
+            });
+            
+            await this.loadComprasAtivas();
+            this.showModal('Ticket usado', 'O ticket foi confirmado como utilizado.');
+        } catch (error) {
+            this.showModal('Erro', 'Não foi possível usar o ticket.');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    // Cancelar ticket (sem devolver pontos)
+    async cancelarTicket(compraId) {
+        if (!confirm('Cancelar este ticket? Os pontos NÃO serão devolvidos.')) return;
         
         this.showLoading(true);
         try {
@@ -637,25 +685,16 @@ class LojaDePontos {
                 delete this.activeTimers[compraId];
             }
             
-            // Devolver pontos
-            this.currentUser.pontos_totais += custoPontos;
-            await this.db.update('usuarios', this.currentUser);
-            
-            // Marcar como concluída (para remover da lista)
             await this.db.update('recompensas_ativas', {
                 id: compraId,
                 concluida: true,
                 data_fim: new Date().toISOString()
             });
             
-            this.updatePointsDisplay();
-            await this.loadUsuarios();
             await this.loadComprasAtivas();
-            await this.loadRecompensas();
-            
-            this.showModal('Revogada', `${custoPontos} pontos devolvidos.`);
+            this.showModal('Cancelado', 'O ticket foi cancelado.');
         } catch (error) {
-            this.showModal('Erro', 'Não foi possível revogar.');
+            this.showModal('Erro', 'Não foi possível cancelar.');
         } finally {
             this.showLoading(false);
         }
@@ -709,7 +748,6 @@ class LojaDePontos {
         if (!this.currentUser) return;
         this.showLoading(true);
         try {
-            // Histórico de ações
             const historicoAcoes = await this.db.getAll('historico_acoes');
             const acoesUsuario = historicoAcoes
                 .filter(h => h.usuario_id === this.currentUser.id)
@@ -738,7 +776,6 @@ class LojaDePontos {
                 });
             }
 
-            // Histórico de compras
             const historicoCompras = await this.db.getAll('historico_compras');
             const comprasUsuario = historicoCompras
                 .filter(h => h.usuario_id === this.currentUser.id)
