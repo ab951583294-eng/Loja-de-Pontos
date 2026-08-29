@@ -14,7 +14,7 @@
             <nav>
                 <button id="btnDashboard" class="nav-btn active">Dashboard</button>
                 <button id="btnAdmin" class="nav-btn">Administração</button>
-                <button id="btnLock" class="nav-btn lock-btn" title="Bloquear/Desbloquear">🔒</button>
+                <button id="btnLock" class="nav-btn lock-btn" title="Bloquear/Desbloquear">LIVRE</button>
             </nav>
         </div>
     </header>
@@ -42,6 +42,7 @@
                 <button class="tab-btn" data-tab="recompensas">Recompensas</button>
                 <button class="tab-btn" data-tab="compras">Minhas Compras</button>
                 <button class="tab-btn" data-tab="metas">Metas do Dia</button>
+                <button class="tab-btn" data-tab="calendario">Calendário</button>
             </div>
 
             <!-- AÇÕES -->
@@ -124,6 +125,20 @@
                 <!-- Conteúdo do dia -->
                 <div id="metasDiaContent">
                     <p class="empty-state">Selecione um usuário para ver as metas</p>
+                </div>
+            </div>
+
+            <!-- CALENDÁRIO -->
+            <div id="tab-calendario" class="tab-content">
+                <div class="section">
+                    <div class="calendario-header">
+                        <button class="btn btn-secondary" onclick="app.mudarMes(-1)">← Anterior</button>
+                        <h2 id="calendarioMesAno">Mês/Ano</h2>
+                        <button class="btn btn-secondary" onclick="app.mudarMes(1)">Próximo →</button>
+                    </div>
+                    <div id="calendarioGrid" class="calendario-grid">
+                        <!-- Dias serão gerados via JS -->
+                    </div>
                 </div>
             </div>
         </section>
