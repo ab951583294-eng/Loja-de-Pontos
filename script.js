@@ -102,6 +102,7 @@ class LojaDePontos {
         this.xpNecessarioProximoNivel = 100;
         this.calendarioDataAtual = new Date();
         this.historicoDiasMap = {};
+        this.dataMetasSelecionada = null;
         this.init();
     }
 
@@ -131,6 +132,7 @@ class LojaDePontos {
         document.getElementById('btnAdmin').addEventListener('click', () => this.switchPage('admin'));
         document.getElementById('btnLock').addEventListener('click', () => this.handleLockClick());
         document.getElementById('selectUser').addEventListener('change', (e) => this.selectUser(e.target.value));
+        document.getElementById('dataMetas').addEventListener('change', (e) => this.selecionarDataMetas(e.target.value));
         
         document.querySelectorAll('.main-tabs .tab-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -338,7 +340,8 @@ class LojaDePontos {
             this.loadComprasAtivas();
         }
         if (tab === 'metas' && this.currentUser) {
-            this.carregarMetasDoDia();
+            this.atualizarSeletorDataMetas();
+            this.carregarMetasDoDia(this.dataMetasSelecionada);
         }
     }
 
@@ -384,7 +387,7 @@ class LojaDePontos {
                     </div>
                     <div style="display: flex; gap: 5px; flex-wrap: wrap;">
                         <button class="btn btn-secondary" onclick="app.zerarPontos(${usuario.id})" title="Zerar pontos">↺</button>
-                        <button class="btn btn-secondary" onclick="app.zerarHistorico(${usuario.id})" title="Limpar histórico"></button>
+                        <button class="btn btn-secondary" onclick="app.zerarHistorico(${usuario.id})" title="Limpar histórico">✕</button>
                         <button class="btn btn-danger" onclick="app.deleteUsuario(${usuario.id})">Excluir</button>
                     </div>
                 `;
@@ -401,6 +404,7 @@ class LojaDePontos {
             document.getElementById('comprasAtivasList').innerHTML = '<p class="empty-state">Selecione um usuário</p>';
             document.getElementById('metasDiaContent').innerHTML = '<p class="empty-state">Selecione um usuário para ver as metas</p>';
             document.getElementById('diaPendenteBanner').style.display = 'none';
+            document.getElementById('dataMetas').innerHTML = '<option value="">-- Selecione --</option>';
             this.streakAtual = 0;
             this.maiorStreak = 0;
             this.nivelAtual = 1;
@@ -418,7 +422,8 @@ class LojaDePontos {
         
         const metasTab = document.querySelector('.main-tabs [data-tab="metas"]');
         if (metasTab && metasTab.classList.contains('active')) {
-            this.carregarMetasDoDia();
+            this.atualizarSeletorDataMetas();
+            this.carregarMetasDoDia(this.dataMetasSelecionada);
         }
     }
 
@@ -426,6 +431,46 @@ class LojaDePontos {
         if (this.currentUser) {
             document.getElementById('totalPoints').textContent = this.currentUser.pontos_totais;
         }
+    }
+
+    // ============================================================
+    // SELETOR DE DATA PARA METAS
+    // ============================================================
+    atualizarSeletorDataMetas() {
+        const select = document.getElementById('dataMetas');
+        const hoje = this.getDataHoje();
+        const ontem = this.getDataOntem();
+        
+        select.innerHTML = `
+            <option value="${hoje}">Hoje (${this.formatarData(hoje)})</option>
+            <option value="${ontem}">Ontem (${this.formatarData(ontem)})</option>
+        `;
+        
+        // Selecionar ontem se existir dia pendente, senão hoje
+        if (this.diaPendente) {
+            select.value = ontem;
+            this.dataMetasSelecionada = ontem;
+        } else {
+            select.value = hoje;
+            this.dataMetasSelecionada = hoje;
+        }
+    }
+
+    async selecionarDataMetas(dataStr) {
+        if (!dataStr) return;
+        
+        // Validar se a data é hoje ou ontem
+        const hoje = this.getDataHoje();
+        const ontem = this.getDataOntem();
+        
+        if (dataStr !== hoje && dataStr !== ontem) {
+            this.showModal('Data inválida', 'Só é possível editar hoje ou ontem.');
+            document.getElementById('dataMetas').value = this.dataMetasSelecionada || hoje;
+            return;
+        }
+        
+        this.dataMetasSelecionada = dataStr;
+        await this.carregarMetasDoDia(dataStr);
     }
 
     // ============================================================
@@ -1105,6 +1150,8 @@ class LojaDePontos {
     }
 
     irParaDiaPendente() {
+        document.getElementById('dataMetas').value = this.diaPendente;
+        this.dataMetasSelecionada = this.diaPendente;
         this.carregarMetasDoDia(this.diaPendente);
     }
 
@@ -1125,11 +1172,18 @@ class LojaDePontos {
             return;
         }
 
+        const dataAlvo = dataEspecifica || this.dataMetasSelecionada || this.getDataHoje();
+        
+        // Validar data
+        const hoje = this.getDataHoje();
+        const ontem = this.getDataOntem();
+        if (dataAlvo !== hoje && dataAlvo !== ontem) {
+            this.showModal('Data inválida', 'Só é possível editar hoje ou ontem.');
+            return;
+        }
+
         this.showLoading(true);
         try {
-            const dataAlvo = dataEspecifica || this.getDataHoje();
-            const ehDiaPendente = dataEspecifica !== null;
-            
             const historico = await this.db.query('historico_dias', { 
                 usuario_id: this.currentUser.id, 
                 data: dataAlvo 
@@ -1165,7 +1219,7 @@ class LojaDePontos {
             }
             
             this.metasDoDia = metasDoDia;
-            this.mostrarMetasDoDia(metasDoDia, dataAlvo, ehDiaPendente);
+            this.mostrarMetasDoDia(metasDoDia, dataAlvo);
         } catch (error) {
             console.error('Erro:', error);
             document.getElementById('metasDiaContent').innerHTML = '<p class="empty-state">Erro ao carregar metas</p>';
@@ -1174,7 +1228,7 @@ class LojaDePontos {
         }
     }
 
-    mostrarMetasDoDia(metas, data, ehDiaPendente) {
+    mostrarMetasDoDia(metas, data) {
         const container = document.getElementById('metasDiaContent');
         const concluidas = metas.filter(m => m.concluida).length;
         const total = metas.length;
@@ -1182,7 +1236,9 @@ class LojaDePontos {
         const valorPorMeta = total > 0 ? Math.round(100 / total) : 0;
         
         const dataFormatada = this.formatarData(data);
-        const titulo = ehDiaPendente ? `Metas do dia ${dataFormatada} (pendente)` : `Metas de hoje`;
+        const hoje = this.getDataHoje();
+        const ehHoje = data === hoje;
+        const titulo = ehHoje ? `Metas de hoje` : `Metas de ${dataFormatada}`;
         
         let html = `
             <div class="section">
@@ -1198,9 +1254,8 @@ class LojaDePontos {
         if (total === 0) {
             html += `<p class="empty-state">Nenhuma meta cadastrada. Adicione metas em Administração.</p>`;
         } else {
-            const templates = this._metaTemplates || [];
             metas.forEach(meta => {
-                const metaTemplate = templates.find(t => t.id === meta.meta_id);
+                const metaTemplate = this._metaTemplates?.find(t => t.id === meta.meta_id);
                 const descricao = metaTemplate ? metaTemplate.descricao : 'Meta removida';
                 
                 html += `
@@ -1214,7 +1269,7 @@ class LojaDePontos {
             
             html += `
                 <button class="btn btn-primary encerrar-dia-btn" onclick="app.encerrarDia('${data}')">
-                    ${ehDiaPendente ? 'Encerrar dia pendente' : 'Encerrar dia'}
+                    Encerrar dia
                 </button>
             `;
         }
@@ -1261,12 +1316,10 @@ class LojaDePontos {
             const total = metas.length;
             const percentual = total > 0 ? Math.round((concluidas / total) * 100) : 0;
             
-            // Calcular XP
             const xpMetas = concluidas * CONFIG.XP_POR_META;
             const xpBonus = percentual >= 100 ? CONFIG.XP_POR_DIA_COMPLETO : 0;
             const xpTotal = xpMetas + xpBonus;
             
-            // Calcular novo streak
             let novoStreak = this.streakAtual;
             if (percentual >= CONFIG.PERCENTUAL_MINIMO_STREAK) {
                 novoStreak = this.streakAtual + 1;
@@ -1276,7 +1329,6 @@ class LojaDePontos {
             
             const novoMaiorStreak = Math.max(novoStreak, this.maiorStreak);
             
-            // Bônus de marco de streak
             let recompensaBonusId = null;
             let recompensaBonusNome = null;
             let mensagemBonus = null;
@@ -1301,7 +1353,6 @@ class LojaDePontos {
                 }
             }
             
-            // Recompensa aleatória por 100%
             let recompensaAleatoria = null;
             if (percentual >= CONFIG.PERCENTUAL_RECOMPENSA_ALEATORIA && total > 0) {
                 const recompensasDisponiveis = await this.db.query('recompensas', { tempo_minutos: 0 });
@@ -1518,7 +1569,6 @@ class LojaDePontos {
             const dataAtual = new Date(ano, mes, dia);
             const ehHoje = dataAtual.toDateString() === hoje.toDateString();
             const ehPassado = dataAtual < hoje;
-            const ehFuturo = dataAtual > hoje;
             
             const diaInfo = this.historicoDiasMap[dataStr];
             
@@ -1608,9 +1658,9 @@ class LojaDePontos {
             return;
         }
         
-        const mensagem = ` Dia ${this.formatarData(dataStr)}\n\n` +
+        const mensagem = `📊 Dia ${this.formatarData(dataStr)}\n\n` +
             `✅ Metas: ${diaInfo.metas_concluidas}/${diaInfo.metas_total}\n` +
-            `📈 Conclusão: ${diaInfo.percentual_conclusao}%\n` +
+            ` Conclusão: ${diaInfo.percentual_conclusao}%\n` +
             `⭐ XP Ganho: ${diaInfo.xp_ganho}\n` +
             `🔥 Streak: ${diaInfo.streak_atual}\n` +
             `${diaInfo.recompensa_bonus_nome ? `🎁 Bônus: ${diaInfo.recompensa_bonus_nome}\n` : ''}`;
