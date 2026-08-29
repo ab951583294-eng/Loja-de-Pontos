@@ -6,11 +6,15 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Configurações do sistema de metas
-const CONFIG_METAS = {
-    PERCENTUAL_MINIMO_STREAK: 50, // % mínimo de metas para manter/aumentar streak
-    MARCO_STREAK_BONUS: 15, // A cada X dias de streak, ganha recompensa bônus
-    PERCENTUAL_RECOMPENSA_ALEATORIA: 100 // % para ganhar recompensa aleatória
+// ============================================================
+// CONFIGURAÇÕES DO SISTEMA
+// ============================================================
+const CONFIG = {
+    PERCENTUAL_MINIMO_STREAK: 50,
+    MARCO_STREAK_BONUS: 15,
+    PERCENTUAL_RECOMPENSA_ALEATORIA: 100,
+    XP_POR_META: 10,
+    XP_POR_DIA_COMPLETO: 50
 };
 
 // ============================================================
@@ -75,16 +79,6 @@ class Database {
         if (error) throw error;
         return data || [];
     }
-
-    async upsert(table, data, conflictColumns) {
-        const { data: result, error } = await supabaseClient
-            .from(table)
-            .upsert(data, { onConflict: conflictColumns.join(',') })
-            .select()
-            .single();
-        if (error) throw error;
-        return result;
-    }
 }
 
 // ============================================================
@@ -101,6 +95,11 @@ class LojaDePontos {
         this.diaEncerrado = false;
         this.diaPendente = null;
         this.streakAtual = 0;
+        this.maiorStreak = 0;
+        this.nivelAtual = 1;
+        this.xpAtual = 0;
+        this.xpParaProximo = 100;
+        this.xpNecessarioProximoNivel = 100;
         this.init();
     }
 
@@ -172,12 +171,12 @@ class LojaDePontos {
         const newCode = this.generateRandomCode(32);
         
         body.innerHTML = `
-            <h3>🔒 Bloquear Sistema</h3>
+            <h3> Bloquear Sistema</h3>
             <p>Ao bloquear, você não poderá mais editar recompensas, ações, usuários ou metas. Apenas operações de uso continuarão disponíveis.</p>
             <div class="lock-warning">
                 ⚠️ <strong>Guarde este código!</strong> Ele será necessário para desbloquear. O código muda a cada bloqueio.
             </div>
-            <div class="lock-code-display" id="generatedCode">${newCode}</div>
+            <div class="lock-code-display">${newCode}</div>
             <div class="lock-actions">
                 <button class="btn btn-secondary" onclick="app.closeLockModal()">Cancelar</button>
                 <button class="btn btn-primary" onclick="app.confirmLock()">Confirmar Bloqueio</button>
@@ -205,7 +204,7 @@ class LojaDePontos {
         body.innerHTML = `
             <h3>🔓 Desbloquear Sistema</h3>
             <p>Digite o código abaixo para desbloquear:</p>
-            <div class="lock-code-display" id="unlockCodeDisplay">${this.lockCode}</div>
+            <div class="lock-code-display">${this.lockCode}</div>
             <div class="lock-warning">
                 📝 Digite o código exatamente como aparece acima. Copiar e colar está desabilitado.
             </div>
@@ -282,7 +281,7 @@ class LojaDePontos {
         const deleteButtons = document.querySelectorAll('.btn-danger');
         
         if (this.isLocked) {
-            lockBtn.textContent = '🔒';
+            lockBtn.textContent = '';
             lockBtn.classList.add('is-locked');
             if (adminBanner) adminBanner.style.display = 'block';
             adminForms.forEach(form => { form.style.display = 'none'; });
@@ -395,6 +394,11 @@ class LojaDePontos {
             document.getElementById('comprasAtivasList').innerHTML = '<p class="empty-state">Selecione um usuário</p>';
             document.getElementById('metasDiaContent').innerHTML = '<p class="empty-state">Selecione um usuário para ver as metas</p>';
             document.getElementById('diaPendenteBanner').style.display = 'none';
+            this.streakAtual = 0;
+            this.maiorStreak = 0;
+            this.nivelAtual = 1;
+            this.xpAtual = 0;
+            this.atualizarStreakDisplay();
             return;
         }
         this.currentUser = await this.db.get('usuarios', parseInt(userId));
@@ -405,7 +409,6 @@ class LojaDePontos {
         await this.carregarStreak();
         await this.verificarDiaPendente();
         
-        // Se estiver na aba de metas, recarrega
         const metasTab = document.querySelector('.main-tabs [data-tab="metas"]');
         if (metasTab && metasTab.classList.contains('active')) {
             this.carregarMetasDoDia();
@@ -877,7 +880,7 @@ class LojaDePontos {
     }
 
     // ============================================================
-    // METAS DO DIA
+    // METAS DO DIA + STREAK + XP
     // ============================================================
     async loadMetasTemplates() {
         const metas = await this.db.getAll('metas');
@@ -895,7 +898,6 @@ class LojaDePontos {
             item.innerHTML = `
                 <div class="list-item-info">
                     <div class="list-item-name">${meta.descricao}</div>
-                    <div class="list-item-points">+${meta.pontos} pontos</div>
                 </div>
                 <button class="btn btn-danger" onclick="app.deleteMeta(${meta.id})">Excluir</button>
             `;
@@ -906,39 +908,125 @@ class LojaDePontos {
     async carregarStreak() {
         if (!this.currentUser) {
             this.streakAtual = 0;
+            this.maiorStreak = 0;
+            this.nivelAtual = 1;
+            this.xpAtual = 0;
             this.atualizarStreakDisplay();
             return;
         }
 
         try {
-            // Pega o último dia encerrado do usuário
             const historico = await this.db.query('historico_dias', { usuario_id: this.currentUser.id });
             
             if (historico.length === 0) {
                 this.streakAtual = 0;
+                this.maiorStreak = this.currentUser.maior_streak || 0;
             } else {
-                // Ordena por data decrescente
                 historico.sort((a, b) => new Date(b.data) - new Date(a.data));
                 const ultimoDia = historico[0];
                 this.streakAtual = ultimoDia.streak_atual || 0;
+                this.maiorStreak = Math.max(this.streakAtual, this.currentUser.maior_streak || 0);
             }
             
+            await this.carregarXP();
             this.atualizarStreakDisplay();
         } catch (error) {
             console.error('Erro ao carregar streak:', error);
             this.streakAtual = 0;
+            this.maiorStreak = this.currentUser.maior_streak || 0;
             this.atualizarStreakDisplay();
         }
     }
 
+    async carregarXP() {
+        try {
+            const historico = await this.db.query('historico_dias', { usuario_id: this.currentUser.id });
+            const totalXP = historico.reduce((sum, dia) => sum + (dia.xp_ganho || 0), 0);
+            
+            this.xpAtual = totalXP;
+            
+            const niveis = await this.db.getAll('niveis_xp');
+            niveis.sort((a, b) => a.nivel - b.nivel);
+            
+            let nivel = 1;
+            let xpParaProximo = niveis.length > 1 ? niveis[1].xp_necessario : 100;
+            let xpNecessarioProximo = niveis.length > 1 ? niveis[1].xp_necessario : 100;
+            
+            for (let i = niveis.length - 1; i >= 0; i--) {
+                if (totalXP >= niveis[i].xp_necessario) {
+                    nivel = niveis[i].nivel;
+                    if (i < niveis.length - 1) {
+                        xpParaProximo = niveis[i + 1].xp_necessario - totalXP;
+                        xpNecessarioProximo = niveis[i + 1].xp_necessario;
+                    } else {
+                        xpParaProximo = 0;
+                        xpNecessarioProximo = totalXP + 100;
+                    }
+                    break;
+                }
+            }
+            
+            this.nivelAtual = nivel;
+            this.xpParaProximo = xpParaProximo;
+            this.xpNecessarioProximoNivel = xpNecessarioProximo;
+            
+        } catch (error) {
+            console.error('Erro ao carregar XP:', error);
+            this.xpAtual = 0;
+            this.nivelAtual = 1;
+        }
+    }
+
     atualizarStreakDisplay() {
-        document.getElementById('streakCount').textContent = this.streakAtual;
+        document.getElementById('streakAtual').textContent = this.streakAtual;
+        document.getElementById('maiorStreak').textContent = this.maiorStreak;
+        document.getElementById('nivelAtual').textContent = this.nivelAtual;
         
-        const proximoMarco = CONFIG_METAS.MARCO_STREAK_BONUS;
-        const diasParaProximo = proximoMarco - (this.streakAtual % proximoMarco);
-        const diasParaMostrar = diasParaProximo === proximoMarco ? proximoMarco : diasParaProximo;
+        const xpMinNivel = this.xpNecessarioProximoNivel - this.xpParaProximo;
+        const xpNoNivel = this.xpAtual - xpMinNivel;
+        const xpTotalNivel = this.xpParaProximo;
+        const percentualXP = xpTotalNivel > 0 ? Math.min(100, Math.round((xpNoNivel / xpTotalNivel) * 100)) : 0;
         
-        document.getElementById('streakNext').textContent = `Próximo marco: ${diasParaMostrar} dia${diasParaMostrar > 1 ? 's' : ''}`;
+        document.getElementById('xpBar').style.width = `${percentualXP}%`;
+        document.getElementById('xpProgress').textContent = `${this.xpAtual} XP • Faltam ${this.xpParaProximo} XP para o nível ${this.nivelAtual + 1}`;
+    }
+
+    async zerarStreak() {
+        if (!this.currentUser) {
+            this.showModal('Atenção', 'Selecione um usuário.');
+            return;
+        }
+        
+        if (!confirm('Zerar a sequência atual? Esta ação não pode ser desfeita.')) return;
+        
+        this.showLoading(true);
+        try {
+            if (this.streakAtual > (this.currentUser.maior_streak || 0)) {
+                await this.db.update('usuarios', {
+                    id: this.currentUser.id,
+                    maior_streak: this.streakAtual
+                });
+            }
+            
+            const historico = await this.db.query('historico_dias', { usuario_id: this.currentUser.id });
+            if (historico.length > 0) {
+                historico.sort((a, b) => new Date(b.data) - new Date(a.data));
+                const ultimoDia = historico[0];
+                await this.db.update('historico_dias', {
+                    id: ultimoDia.id,
+                    streak_atual: 0
+                });
+            }
+            
+            this.streakAtual = 0;
+            this.atualizarStreakDisplay();
+            
+            this.showModal('Streak zerado', 'A sequência foi resetada para 0.');
+        } catch (error) {
+            this.showModal('Erro', 'Não foi possível zerar o streak.');
+        } finally {
+            this.showLoading(false);
+        }
     }
 
     async verificarDiaPendente() {
@@ -948,28 +1036,24 @@ class LojaDePontos {
             const hoje = this.getDataHoje();
             const ontem = this.getDataOntem();
             
-            // Verifica se hoje já foi encerrado
             const historicoHoje = await this.db.query('historico_dias', { 
                 usuario_id: this.currentUser.id, 
                 data: hoje 
             });
             
             if (historicoHoje.length > 0) {
-                // Hoje já foi encerrado
                 this.diaEncerrado = true;
                 this.diaPendente = null;
                 document.getElementById('diaPendenteBanner').style.display = 'none';
                 return;
             }
             
-            // Verifica se ontem foi encerrado
             const historicoOntem = await this.db.query('historico_dias', { 
                 usuario_id: this.currentUser.id, 
                 data: ontem 
             });
             
             if (historicoOntem.length === 0) {
-                // Ontem não foi encerrado - dia pendente
                 this.diaPendente = ontem;
                 document.getElementById('diaPendenteBanner').style.display = 'block';
             } else {
@@ -988,13 +1072,15 @@ class LojaDePontos {
         
         this.showLoading(true);
         try {
-            // Registra o dia pendente com 0 metas (streak reseta)
             await this.db.add('historico_dias', {
                 usuario_id: this.currentUser.id,
                 data: this.diaPendente,
                 metas_concluidas: 0,
                 metas_total: 0,
                 pontos_ganhos: 0,
+                percentual_conclusao: 0,
+                xp_ganho: 0,
+                nivel: this.nivelAtual,
                 streak_atual: 0
             });
             
@@ -1012,7 +1098,6 @@ class LojaDePontos {
     }
 
     irParaDiaPendente() {
-        // Mostra as metas do dia pendente para o usuário encerrar
         this.carregarMetasDoDia(this.diaPendente);
     }
 
@@ -1038,26 +1123,22 @@ class LojaDePontos {
             const dataAlvo = dataEspecifica || this.getDataHoje();
             const ehDiaPendente = dataEspecifica !== null;
             
-            // Verifica se o dia já foi encerrado
             const historico = await this.db.query('historico_dias', { 
                 usuario_id: this.currentUser.id, 
                 data: dataAlvo 
             });
             
             if (historico.length > 0) {
-                // Dia já encerrado - mostra resultado
                 this.mostrarResultadoDia(historico[0]);
                 this.showLoading(false);
                 return;
             }
             
-            // Carrega ou cria metas do dia
             let metasDoDia = await this.db.query('metas_do_dia', { 
                 usuario_id: this.currentUser.id, 
                 data: dataAlvo 
             });
             
-            // Se não há metas do dia, cria baseado nos templates ativos
             if (metasDoDia.length === 0) {
                 const templates = await this.db.query('metas', { ativa: true });
                 
@@ -1091,6 +1172,7 @@ class LojaDePontos {
         const concluidas = metas.filter(m => m.concluida).length;
         const total = metas.length;
         const percentual = total > 0 ? Math.round((concluidas / total) * 100) : 0;
+        const valorPorMeta = total > 0 ? Math.round(100 / total) : 0;
         
         const dataFormatada = this.formatarData(data);
         const titulo = ehDiaPendente ? `Metas do dia ${dataFormatada} (pendente)` : `Metas de hoje`;
@@ -1099,7 +1181,7 @@ class LojaDePontos {
             <div class="section">
                 <div class="metas-header">
                     <h2>${titulo}</h2>
-                    <div class="metas-progress">${concluidas}/${total} metas (${percentual}%)</div>
+                    <div class="metas-progress">${concluidas}/${total} metas • ${valorPorMeta}% cada</div>
                 </div>
                 <div class="progress-bar-container">
                     <div class="progress-bar" style="width: ${percentual}%"></div>
@@ -1109,33 +1191,33 @@ class LojaDePontos {
         if (total === 0) {
             html += `<p class="empty-state">Nenhuma meta cadastrada. Adicione metas em Administração.</p>`;
         } else {
+            const templates = this._metaTemplates || [];
             metas.forEach(meta => {
-                const metaTemplate = this._metaTemplates?.find(t => t.id === meta.meta_id);
+                const metaTemplate = templates.find(t => t.id === meta.meta_id);
                 const descricao = metaTemplate ? metaTemplate.descricao : 'Meta removida';
-                const pontos = metaTemplate ? metaTemplate.pontos : 0;
                 
                 html += `
                     <div class="meta-item ${meta.concluida ? 'concluida' : ''}" onclick="app.toggleMeta(${meta.id})">
                         <div class="meta-checkbox">${meta.concluida ? '✓' : ''}</div>
                         <div class="meta-descricao">${descricao}</div>
-                        <div class="meta-pontos">+${pontos} pts</div>
+                        <div class="meta-pontos">+${valorPorMeta}%</div>
                     </div>
                 `;
             });
             
             html += `
-                <button class="btn btn-primary encerrar-dia-btn" onclick="app.encerrarDia('${data}')" ${ehDiaPendente ? '' : ''}>
+                <button class="btn btn-primary encerrar-dia-btn" onclick="app.encerrarDia('${data}')">
                     ${ehDiaPendente ? 'Encerrar dia pendente' : 'Encerrar dia'}
                 </button>
             `;
         }
         
         html += `</div>`;
-        
-        // Histórico recente de dias
-        html += this.getHistoricoDiasHTML();
+        html += `<div id="historicoDiasContainer" class="historico-dias-list"></div>`;
         
         container.innerHTML = html;
+        
+        this.carregarHistoricoDias();
     }
 
     async toggleMeta(metaId) {
@@ -1150,7 +1232,6 @@ class LojaDePontos {
                 concluida: meta.concluida
             });
             
-            // Recarrega para atualizar UI
             await this.carregarMetasDoDia(meta.data);
         } catch (error) {
             this.showModal('Erro', 'Não foi possível atualizar a meta.');
@@ -1171,41 +1252,36 @@ class LojaDePontos {
             
             const concluidas = metas.filter(m => m.concluida).length;
             const total = metas.length;
-            const percentual = total > 0 ? (concluidas / total) * 100 : 0;
+            const percentual = total > 0 ? Math.round((concluidas / total) * 100) : 0;
             
-            // Calcula pontos das metas concluídas
-            const templates = await this.db.getAll('metas');
-            let pontosGanhos = 0;
-            metas.forEach(m => {
-                if (m.concluida) {
-                    const template = templates.find(t => t.id === m.meta_id);
-                    if (template) pontosGanhos += template.pontos;
-                }
-            });
+            // Calcular XP
+            const xpMetas = concluidas * CONFIG.XP_POR_META;
+            const xpBonus = percentual >= 100 ? CONFIG.XP_POR_DIA_COMPLETO : 0;
+            const xpTotal = xpMetas + xpBonus;
             
-            // Calcula novo streak
+            // Calcular novo streak
             let novoStreak = this.streakAtual;
-            if (percentual >= CONFIG_METAS.PERCENTUAL_MINIMO_STREAK) {
+            if (percentual >= CONFIG.PERCENTUAL_MINIMO_STREAK) {
                 novoStreak = this.streakAtual + 1;
             } else {
                 novoStreak = 0;
             }
             
-            // Verifica bônus de marco de streak
+            const novoMaiorStreak = Math.max(novoStreak, this.maiorStreak);
+            
+            // Bônus de marco de streak
             let recompensaBonusId = null;
             let recompensaBonusNome = null;
             let mensagemBonus = null;
             
-            if (novoStreak > 0 && novoStreak % CONFIG_METAS.MARCO_STREAK_BONUS === 0) {
-                // Sorteia recompensa aleatória (sem tempo)
+            if (novoStreak > 0 && novoStreak % CONFIG.MARCO_STREAK_BONUS === 0) {
                 const recompensasDisponiveis = await this.db.query('recompensas', { tempo_minutos: 0 });
                 if (recompensasDisponiveis.length > 0) {
                     const sorteada = recompensasDisponiveis[Math.floor(Math.random() * recompensasDisponiveis.length)];
                     recompensaBonusId = sorteada.id;
                     recompensaBonusNome = sorteada.nome;
-                    mensagemBonus = `🏆 Marco de ${CONFIG_METAS.MARCO_STREAK_BONUS} dias! Recompensa: ${sorteada.nome}`;
+                    mensagemBonus = `🏆 Marco de ${CONFIG.MARCO_STREAK_BONUS} dias! Recompensa: ${sorteada.nome}`;
                     
-                    // Cria ticket da recompensa bônus
                     await this.db.add('recompensas_ativas', {
                         usuario_id: this.currentUser.id,
                         recompensa_id: sorteada.id,
@@ -1218,9 +1294,9 @@ class LojaDePontos {
                 }
             }
             
-            // Recompensa aleatória por 100% de conclusão
+            // Recompensa aleatória por 100%
             let recompensaAleatoria = null;
-            if (percentual >= CONFIG_METAS.PERCENTUAL_RECOMPENSA_ALEATORIA && total > 0) {
+            if (percentual >= CONFIG.PERCENTUAL_RECOMPENSA_ALEATORIA && total > 0) {
                 const recompensasDisponiveis = await this.db.query('recompensas', { tempo_minutos: 0 });
                 if (recompensasDisponiveis.length > 0) {
                     const sorteada = recompensasDisponiveis[Math.floor(Math.random() * recompensasDisponiveis.length)];
@@ -1238,37 +1314,40 @@ class LojaDePontos {
                 }
             }
             
-            // Salva no histórico
             await this.db.add('historico_dias', {
                 usuario_id: this.currentUser.id,
                 data: data,
                 metas_concluidas: concluidas,
                 metas_total: total,
-                pontos_ganhos: pontosGanhos,
+                pontos_ganhos: 0,
+                percentual_conclusao: percentual,
+                xp_ganho: xpTotal,
+                nivel: this.nivelAtual,
                 streak_atual: novoStreak,
                 recompensa_bonus_id: recompensaBonusId,
                 recompensa_bonus_nome: recompensaBonusNome
             });
             
-            // Adiciona pontos ao usuário
-            if (pontosGanhos > 0) {
-                this.currentUser.pontos_totais += pontosGanhos;
-                await this.db.update('usuarios', this.currentUser);
-                this.updatePointsDisplay();
-                await this.loadUsuarios();
-            }
+            await this.db.update('usuarios', {
+                id: this.currentUser.id,
+                maior_streak: novoMaiorStreak
+            });
             
             this.streakAtual = novoStreak;
+            this.maiorStreak = novoMaiorStreak;
+            this.xpAtual += xpTotal;
+            
+            await this.carregarXP();
             this.atualizarStreakDisplay();
             this.diaPendente = null;
             document.getElementById('diaPendenteBanner').style.display = 'none';
             
-            // Mostra resultado
             this.mostrarResultadoDia({
                 data: data,
                 metas_concluidas: concluidas,
                 metas_total: total,
-                pontos_ganhos: pontosGanhos,
+                percentual_conclusao: percentual,
+                xp_ganho: xpTotal,
                 streak_atual: novoStreak,
                 recompensa_bonus_nome: recompensaBonusNome
             }, recompensaAleatoria, mensagemBonus);
@@ -1285,10 +1364,6 @@ class LojaDePontos {
 
     mostrarResultadoDia(resultado, recompensaAleatoria = null, mensagemBonus = null) {
         const container = document.getElementById('metasDiaContent');
-        const percentual = resultado.metas_total > 0 
-            ? Math.round((resultado.metas_concluidas / resultado.metas_total) * 100) 
-            : 0;
-        
         const dataFormatada = this.formatarData(resultado.data);
         
         let html = `
@@ -1300,15 +1375,15 @@ class LojaDePontos {
                         <div class="stat-label">Metas</div>
                     </div>
                     <div class="stat-box">
-                        <div class="stat-value">${percentual}%</div>
+                        <div class="stat-value">${resultado.percentual_conclusao}%</div>
                         <div class="stat-label">Concluído</div>
                     </div>
                     <div class="stat-box">
-                        <div class="stat-value">+${resultado.pontos_ganhos}</div>
-                        <div class="stat-label">Pontos</div>
+                        <div class="stat-value">+${resultado.xp_ganho}</div>
+                        <div class="stat-label">XP Ganho</div>
                     </div>
                     <div class="stat-box">
-                        <div class="stat-value">🔥 ${resultado.streak_atual}</div>
+                        <div class="stat-value"> ${resultado.streak_atual}</div>
                         <div class="stat-label">Streak</div>
                     </div>
                 </div>
@@ -1332,14 +1407,10 @@ class LojaDePontos {
         }
         
         html += `</div>`;
-        html += this.getHistoricoDiasHTML();
+        html += `<div id="historicoDiasContainer" class="historico-dias-list"></div>`;
         
         container.innerHTML = html;
-    }
-
-    getHistoricoDiasHTML() {
-        // Será preenchido após carregar o histórico
-        return `<div id="historicoDiasContainer" class="historico-dias-list"></div>`;
+        this.carregarHistoricoDias();
     }
 
     async carregarHistoricoDias() {
@@ -1361,15 +1432,12 @@ class LojaDePontos {
             let html = '<h3 style="margin-bottom: 12px; font-size: 0.95rem;">Últimos 7 dias</h3>';
             recentes.forEach(dia => {
                 const dataFormatada = this.formatarData(dia.data);
-                const percentual = dia.metas_total > 0 
-                    ? Math.round((dia.metas_concluidas / dia.metas_total) * 100) 
-                    : 0;
                 
                 html += `
                     <div class="historico-dias-item">
                         <div class="historico-dias-data">${dataFormatada}</div>
                         <div class="historico-dias-info">
-                            ${dia.metas_concluidas}/${dia.metas_total} metas • +${dia.pontos_ganhos} pts • 🔥 ${dia.streak_atual}
+                            ${dia.metas_concluidas}/${dia.metas_total} metas • ${dia.percentual_conclusao}% • +${dia.xp_ganho} XP • 🔥 ${dia.streak_atual}
                         </div>
                     </div>
                 `;
@@ -1408,7 +1476,7 @@ class LojaDePontos {
     }
 
     async zerarHistorico(usuarioId) {
-        if (!confirm('Apagar TODO o histórico? Isso inclui ações, compras, tickets E metas/streaks.')) return;
+        if (!confirm('Apagar TODO o histórico? Isso inclui ações, compras, tickets, metas e streaks.')) return;
         this.showLoading(true);
         try {
             const ha = await this.db.query('historico_acoes', { usuario_id: usuarioId });
@@ -1421,6 +1489,8 @@ class LojaDePontos {
             for (const h of hd) await this.db.delete('historico_dias', h.id);
             const md = await this.db.query('metas_do_dia', { usuario_id: usuarioId });
             for (const m of md) await this.db.delete('metas_do_dia', m.id);
+            
+            await this.db.update('usuarios', { id: usuarioId, maior_streak: 0 });
             
             await this.loadHistorico();
             await this.loadComprasAtivas();
@@ -1435,7 +1505,7 @@ class LojaDePontos {
     }
 
     // ============================================================
-    // HISTÓRICO
+    // HISTÓRICO DE AÇÕES
     // ============================================================
     async loadHistorico() {
         if (!this.currentUser) return;
@@ -1489,7 +1559,7 @@ class LojaDePontos {
             if (nome) {
                 this.showLoading(true);
                 try {
-                    await this.db.add('usuarios', { nome, pontos_totais: 0 });
+                    await this.db.add('usuarios', { nome, pontos_totais: 0, maior_streak: 0 });
                     document.getElementById('usuarioNome').value = '';
                     await this.loadUsuarios();
                     this.showModal('Adicionado', `Usuário "${nome}" criado.`);
@@ -1559,13 +1629,11 @@ class LojaDePontos {
                 return;
             }
             const descricao = document.getElementById('metaDescricao').value.trim();
-            const pontos = parseInt(document.getElementById('metaPontos').value);
-            if (descricao && !isNaN(pontos)) {
+            if (descricao) {
                 this.showLoading(true);
                 try {
-                    await this.db.add('metas', { descricao, pontos, ativa: true });
+                    await this.db.add('metas', { descricao, ativa: true });
                     document.getElementById('formMeta').reset();
-                    document.getElementById('metaPontos').value = '5';
                     await this.loadMetasTemplates();
                     this.showModal('Adicionada', `Meta "${descricao}" criada.`);
                 } catch (error) {
@@ -1668,7 +1736,7 @@ class LojaDePontos {
     }
 }
 
-// Handlers globais para bloquear copiar/colar
+// Handlers globais
 LojaDePontos.prototype._globalPasteHandler = function(e) {
     const lockModal = document.getElementById('lockModal');
     if (lockModal && lockModal.classList.contains('active')) {
